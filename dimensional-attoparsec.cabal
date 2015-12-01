@@ -4,7 +4,6 @@
 name:                dimensional-attoparsec
 version:             0.1.0.0
 synopsis:            Parsing features for the dimensional library.
--- description:         
 homepage:            https://github.com/dmcclean/dimensional-attoparsec
 license:             BSD3
 license-file:        LICENSE
@@ -13,7 +12,6 @@ maintainer:          douglas.mcclean@gmail.com
 -- copyright:           
 category:            Math
 build-type:          Simple
-extra-source-files:  README.md
 cabal-version:       >=1.10
 tested-with:         GHC == 7.8.4, GHC == 7.10.1, GHC == 7.10.2
 
