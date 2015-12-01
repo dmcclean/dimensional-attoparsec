@@ -30,7 +30,7 @@ source-repository head
   location: https://github.com/dmcclean/dimensional-attoparsec/
 
 library
-  build-depends:       base >=4.8 && <4.9,
+  build-depends:       base >=4.7 && <4.9,
                        attoparsec >= 0.13.0.1,
                        dimensional >= 1.0.1 && <2,
                        exact-pi >= 0.4.1 && < 0.5,
