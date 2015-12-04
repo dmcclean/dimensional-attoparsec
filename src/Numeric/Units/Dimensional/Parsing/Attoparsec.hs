@@ -20,15 +20,14 @@ import Data.Attoparsec.Text as A
 import Data.ExactPi as E
 import Data.Map as M
 import Data.Text as T
-import Numeric.Units.Dimensional as D hiding (recip)
-import Numeric.Units.Dimensional.Dynamic
+import Numeric.Units.Dimensional.Dynamic hiding ((*), (/), recip)
+import qualified Numeric.Units.Dimensional.Dynamic as Dyn
 import Numeric.Units.Dimensional.SIUnits
-import Numeric.Units.Dimensional.UnitNames as N hiding (atom)
 import Numeric.Units.Dimensional.UnitNames.InterchangeNames as I
 import Prelude hiding (exponent, recip)
 import qualified Prelude as P
 
-type AnyValue = (ExactPi, AnyUnit)
+type AnyValue = (ExactPi, Maybe AnyUnit) -- second component of Nothing identifies an implicit unit of 1 which should not appear unless required
 
 type UnitMap = Map Text AnyUnit
 
@@ -42,42 +41,42 @@ buildUnitMap (u:us) = do
     n = interchangeName u
 
 allUcumUnits :: [AnyUnit]
-allUcumUnits = [ demoteUnit metre
-               , demoteUnit gram
-               , demoteUnit second
-               , demoteUnit ampere
-               , demoteUnit kelvin
-               , demoteUnit mole
-               , demoteUnit candela
-               , demoteUnit radian
-               , demoteUnit steradian
-               , demoteUnit hertz
-               , demoteUnit newton
-               , demoteUnit pascal
-               , demoteUnit joule
-               , demoteUnit watt
-               , demoteUnit coulomb
-               , demoteUnit volt
-               , demoteUnit farad
-               , demoteUnit ohm
-               , demoteUnit siemens
-               , demoteUnit weber
-               , demoteUnit tesla
-               , demoteUnit henry
-               , demoteUnit lumen
-               , demoteUnit lux
-               , demoteUnit degreeCelsius
-               , demoteUnit becquerel
-               , demoteUnit gray
-               , demoteUnit sievert
-               , demoteUnit katal
-               , demoteUnit degree
-               , demoteUnit arcminute
-               , demoteUnit arcsecond
-               , demoteUnit degreeOfArc
-               , demoteUnit minuteOfArc
-               , demoteUnit secondOfArc
-               , demoteUnit astronomicalUnit
+allUcumUnits = [ demoteUnit' metre
+               , demoteUnit' gram
+               , demoteUnit' second
+               , demoteUnit' ampere
+               , demoteUnit' kelvin
+               , demoteUnit' mole
+               , demoteUnit' candela
+               , demoteUnit' radian
+               , demoteUnit' steradian
+               , demoteUnit' hertz
+               , demoteUnit' newton
+               , demoteUnit' pascal
+               , demoteUnit' joule
+               , demoteUnit' watt
+               , demoteUnit' coulomb
+               , demoteUnit' volt
+               , demoteUnit' farad
+               , demoteUnit' ohm
+               , demoteUnit' siemens
+               , demoteUnit' weber
+               , demoteUnit' tesla
+               , demoteUnit' henry
+               , demoteUnit' lumen
+               , demoteUnit' lux
+               , demoteUnit' degreeCelsius
+               , demoteUnit' becquerel
+               , demoteUnit' gray
+               , demoteUnit' sievert
+               , demoteUnit' katal
+               , demoteUnit' degree
+               , demoteUnit' arcminute
+               , demoteUnit' arcsecond
+               , demoteUnit' degreeOfArc
+               , demoteUnit' minuteOfArc
+               , demoteUnit' secondOfArc
+               , demoteUnit' astronomicalUnit
                ]
 
 ucumSI :: Parser AnyValue
@@ -131,7 +130,9 @@ prefixed a = do
                u <- a
                -- dynamically verify that the AnyUnit was metric, then apply the prefix and return it
                -- if it wasn't metric, return an error
-               error "monkey"
+               case Dyn.applyPrefix p u of
+                 Just u' -> return u'
+                 Nothing -> fail "Metric prefix was applied to non-metric unit."
 
 annotatable :: UnitMap -> Parser AnyUnit
 annotatable m = simpleUnitWithExponent su <|> su
@@ -141,8 +142,7 @@ annotatable m = simpleUnitWithExponent su <|> su
     simpleUnitWithExponent s = do
                                  u <- s
                                  e <- exponent
-                                 -- dynamically apply the exponent
-                                 undefined
+                                 return $ u Dyn.^ e
 
 annotation :: Parser Text
 annotation = bracket '{' '}' $ A.takeWhile (\c -> '!' <= c && c <= '~' && c /= '{' && c /= '}')
@@ -155,23 +155,29 @@ term m = term'
                    , component
                    ]
     component :: Parser AnyValue
-    component = choice [ (1,) <$> ann <* annotation
-                       , fmap (1,) ann
-                       , fmap (const (1, one')) annotation
-                       , fmap ((, one') . fromInteger) factor
+    component = choice [ justUnit <$> ann <* annotation
+                       , justUnit <$> ann
+                       , (const (1, Nothing)) <$> annotation
+                       , ((, Nothing) . fromInteger) <$> factor
                        , bracket '(' ')' $ term'
                        ]
-    one' = demoteUnit (one :: Unit 'NonMetric DOne Integer)
+    justUnit = (1,) . Just
     ann = annotatable m
 
 recip :: AnyValue -> AnyValue
-recip (x, u) = (P.recip x, error "frog")
+recip (x, Nothing) = (P.recip x, Nothing)
+recip (x, Just u)  = (P.recip x, Just $ Dyn.recip u)
+
+liftAV2 :: (ExactPi -> ExactPi -> ExactPi) -> (AnyUnit -> AnyUnit -> AnyUnit) -> AnyValue -> AnyValue -> AnyValue
+liftAV2 fv _  (x1, u1)      (x2, Nothing) = (fv x1 x2, u1)
+liftAV2 fv _  (x1, Nothing) (x2, u2)      = (fv x1 x2, u2)
+liftAV2 fv fu (x1, Just u1) (x2, Just u2) = (fv x1 x2, Just $ fu u1 u2)
 
 multiply :: AnyValue -> AnyValue -> AnyValue
-multiply (x1, u1) (x2, u2) = (x1 P.* x2, error "squirrel")
+multiply = liftAV2 (P.*) (Dyn.*)
 
 divide :: AnyValue -> AnyValue -> AnyValue
-divide (x1, u1) (x2, u2)   = (x1 P./ x2, error "moose")
+divide = liftAV2 (P./) (Dyn./)
 
 bracket :: Char -> Char -> Parser a -> Parser a
 bracket b e p = char b *> p <* char e
