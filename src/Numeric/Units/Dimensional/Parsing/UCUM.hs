@@ -1,7 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TupleSections #-}
 
-module Numeric.Units.Dimensional.Parsing.Attoparsec
+module Numeric.Units.Dimensional.Parsing.UCUM
 (
   ucumUnit
 , ucumSI
