@@ -38,6 +38,7 @@ library
   hs-source-dirs:      src
   ghc-options:         -Wall
   default-language:    Haskell2010
-  exposed-modules:     Numeric.Units.Dimensional.Parsing.UCUM
+  exposed-modules:     Numeric.Units.Dimensional.Parsing.UCUM,
+                       Numeric.Units.Dimensional.Parsing.Units
   -- other-modules:
   -- other-extensions:
