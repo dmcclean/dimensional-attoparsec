@@ -23,6 +23,7 @@ import Data.Text as T
 import Numeric.Units.Dimensional.Dynamic hiding ((*), (/), recip)
 import qualified Numeric.Units.Dimensional.Dynamic as Dyn
 import Numeric.Units.Dimensional.SIUnits
+import Numeric.Units.Dimensional.NonSI
 import Numeric.Units.Dimensional.UnitNames.InterchangeNames as I
 import Prelude hiding (exponent, recip)
 import qualified Prelude as P
@@ -77,6 +78,41 @@ allUcumUnits = [ demoteUnit' metre
                , demoteUnit' minuteOfArc
                , demoteUnit' secondOfArc
                , demoteUnit' astronomicalUnit
+               , demoteUnit' electronVolt
+               , demoteUnit' unifiedAtomicMassUnit
+               , demoteUnit' gee
+               , demoteUnit' inch
+               , demoteUnit' foot
+               , demoteUnit' mil
+               , demoteUnit' poundForce
+--               , demoteUnit' horsepower
+               , demoteUnit' psi
+               , demoteUnit' yard
+               , demoteUnit' mile
+               , demoteUnit' nauticalMile
+               , demoteUnit' knot
+               , demoteUnit' teaspoon
+               , demoteUnit' acre
+               , demoteUnit' year
+               , demoteUnit' bar
+               , demoteUnit' atmosphere
+               , demoteUnit' technicalAtmosphere
+--               , demoteUnit' mHg
+               , demoteUnit' inHg_UCUM
+               , demoteUnit' rad
+               , demoteUnit' stokes
+               , demoteUnit' imperialGallon
+               , demoteUnit' imperialQuart
+               , demoteUnit' imperialPint
+               , demoteUnit' imperialCup
+               , demoteUnit' imperialGill
+               , demoteUnit' imperialFluidOunce
+               , demoteUnit' usGallon
+               , demoteUnit' usQuart
+               , demoteUnit' usPint
+               , demoteUnit' usCup
+               , demoteUnit' usGill
+               , demoteUnit' usFluidOunce
                ]
 
 ucumSI :: Parser AnyValue
@@ -98,12 +134,14 @@ exponent :: Parser Integer
 exponent = signed decimal
 
 atomSymbol :: Parser Text
-atomSymbol = do
-               r <- core
-               if (P.all (inClass "0-9") . T.unpack $ r)
-                 then fail "Expected an atom symbol but all characters were digits."
-                 else return r
+atomSymbol = (\a -> T.concat ["[", a, "]"]) <$> bracket '[' ']' atomSymbolCore
+         <|> atomSymbolCore
   where
+    atomSymbolCore = do
+                       r <- core
+                       if (P.all (inClass "0-9") . T.unpack $ r)
+                         then fail "Expected an atom symbol but all characters were digits."
+                         else return r
     core = A.takeWhile1 $ inClass "!#-'*,0-<>-Z\\^-z|~"
 
 atom :: UnitMap -> Parser AnyUnit
