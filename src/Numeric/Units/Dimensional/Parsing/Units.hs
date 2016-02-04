@@ -1,9 +1,13 @@
+{-# LANGUAGE RankNTypes #-}
+
 module Numeric.Units.Dimensional.Parsing.Units where
 
 import Control.Applicative
+import Control.Monad (join)
 import Data.Attoparsec.Text as A
 import Data.ExactPi as E
-import Data.Map as M
+import qualified Data.Map as M
+import Data.Maybe (mapMaybe)
 import Data.Text as T
 import Numeric.Units.Dimensional.Dynamic hiding ((*), (/), recip)
 import qualified Numeric.Units.Dimensional.Dynamic as Dyn
@@ -12,17 +16,52 @@ import Numeric.Units.Dimensional.UnitNames
 import Prelude hiding (exponent, recip)
 import qualified Prelude as P
 
+unit :: [AnyUnit] -> Parser (Maybe AnyUnit)
+unit us = prefixedFullUnit us
+      <|> prefixedAtomicUnit us
+
+prefixedFullUnit :: [AnyUnit] -> Parser (Maybe AnyUnit)
+prefixedFullUnit us = do
+                        p <- optional fullPrefix
+                        u <- fullAtomicUnit us
+                        return $ case p of
+                                   Just p' -> Dyn.applyPrefix p' u
+                                   Nothing -> Just u
+
+prefixedAtomicUnit :: [AnyUnit] -> Parser (Maybe AnyUnit)
+prefixedAtomicUnit us = do
+                          p <- optional abbreviatedPrefix
+                          u <- abbreviatedAtomicUnit us
+                          return $ case p of
+                                     Just p' -> Dyn.applyPrefix p' u
+                                     Nothing -> Just u
+
+abbreviatedAtomicUnit :: [AnyUnit] -> Parser AnyUnit
+abbreviatedAtomicUnit = atomicUnit abbreviation_en
+
+fullAtomicUnit :: [AnyUnit] -> Parser AnyUnit
+fullAtomicUnit = atomicUnit name_en
+
+atomicUnit :: (forall a.NameAtom a -> String) -> [AnyUnit] -> Parser AnyUnit
+atomicUnit f us = choice $ mapMaybe parseUnit us
+  where
+    parseUnit :: AnyUnit -> Maybe (Parser AnyUnit)
+    parseUnit u = do
+                    let n = anyUnitName u
+                    a <- asAtomic n
+                    return $ u <$ (asciiCI . T.pack . f $ a)
+
 abbreviatedPrefix :: Parser Prefix
-abbreviatedPrefix = prefix undefined
+abbreviatedPrefix = prefix abbreviation_en
 
 fullPrefix :: Parser Prefix
-fullPrefix = prefix undefined
+fullPrefix = prefix name_en
 
 prefix :: (PrefixName -> String) -> Parser Prefix
 prefix f = choice $ fmap parsePrefix siPrefixes
   where
     parsePrefix :: Prefix -> Parser Prefix
-    parsePrefix p = p <$ (string . T.pack . f . prefixName $ p)
+    parsePrefix p = p <$ (asciiCI . T.pack . f . prefixName $ p)
 
 integerExponent :: Parser Integer
 integerExponent = char '^' *> signed decimal
