@@ -1,12 +1,11 @@
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 
 module Numeric.Units.Dimensional.Parsing.Units where
 
 import Control.Applicative
-import Control.Monad (join)
 import Data.Attoparsec.Text as A
 import Data.ExactPi as E
-import qualified Data.Map as M
 import Data.Maybe (mapMaybe)
 import Data.Text as T
 import Numeric.Units.Dimensional.Dynamic hiding ((*), (/), recip)
@@ -15,6 +14,50 @@ import Numeric.Units.Dimensional.SIUnits
 import Numeric.Units.Dimensional.UnitNames
 import Prelude hiding (exponent, recip)
 import qualified Prelude as P
+
+quantity :: [AnyUnit] -> Parser (DynQuantity ExactPi)
+quantity us = try $ unitAsQuantity us
+          <|> unaryFunctionApplication us
+
+unaryFunctionApplication :: [AnyUnit] -> Parser (DynQuantity ExactPi)
+unaryFunctionApplication us = do
+                                f <- unaryFunction
+                                _ <- char '('
+                                x <- q
+                                _ <- char ')'
+                                return $ f x
+  where
+    q = quantity us
+
+unaryFunction :: Parser (DynQuantity ExactPi -> DynQuantity ExactPi)
+unaryFunction = choice $ fmap (\(n, f) -> f <$ asciiCI n) fs
+  where
+    fs = [ ("abs", abs)
+         , ("signum", signum)
+         , ("sgn", signum)
+         , ("exp", exp)
+         , ("log", log)
+         , ("ln", log)
+         , ("sqrt", sqrt)
+         , ("sin", sin)
+         , ("cos", cos)
+         , ("tan", tan)
+         , ("asin", asin)
+         , ("acos", acos)
+         , ("atan", atan)
+         , ("sinh", sinh)
+         , ("cosh", cosh)
+         , ("tanh", tanh)
+         , ("asinh", asinh)
+         , ("acosh", acosh)
+         , ("atanh", atanh)
+         ]
+
+unitAsQuantity :: [AnyUnit] -> Parser (DynQuantity ExactPi)
+unitAsQuantity us = wrap <$> unit us
+  where
+    wrap (Just u) = 1 *~ u
+    wrap Nothing  = invalidQuantity
 
 unit :: [AnyUnit] -> Parser (Maybe AnyUnit)
 unit us = prefixedFullUnit us
