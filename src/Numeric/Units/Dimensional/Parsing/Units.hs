@@ -125,10 +125,15 @@ unit us = prod <$> some oneUnit
     power u _ = u
 
 bareUnit :: (CharParsing m, Monad m) => [AnyUnit] -> m (Maybe AnyUnit)
-bareUnit us = try (Just <$> fullAtomicUnit us)
-          <|> try (Just <$> abbreviatedAtomicUnit us)
-          <|> try (prefixedFullUnit us)
-          <|> prefixedAtomicUnit us
+bareUnit us = safe (Just <$> fullAtomicUnit us)
+          <|> safe (Just <$> abbreviatedAtomicUnit us)
+          <|> safe (prefixedFullUnit us)
+          <|> safe (prefixedAtomicUnit us)
+  where
+    safe x = try (do{ r <- x
+                      ; notFollowedBy alphaNum
+                      ; return r
+                      })
 
 prefixedFullUnit :: (CharParsing m, Monad m) => [AnyUnit] -> m (Maybe AnyUnit)
 prefixedFullUnit us = Dyn.applyPrefix <$> fullPrefix <*> fullAtomicUnit us
