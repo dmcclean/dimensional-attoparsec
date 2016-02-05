@@ -41,3 +41,18 @@ library
                        Numeric.Units.Dimensional.Parsing.Units
   -- other-modules:
   -- other-extensions:
+
+test-suite tests
+  type:                exitcode-stdio-1.0
+  main-is:             Test.hs
+  hs-source-dirs:      tests
+  default-language:    Haskell2010
+  ghc-options:         -Wall
+  build-depends:       dimensional-parsing,
+                       dimensional,
+                       exact-pi,
+                       hspec,
+                       text,
+                       attoparsec,
+                       ieee754,
+                       base

@@ -23,6 +23,7 @@ import Data.Text as T
 import Numeric.Units.Dimensional.Dynamic hiding ((*), (/), recip)
 import qualified Numeric.Units.Dimensional.Dynamic as Dyn
 import Numeric.Units.Dimensional.SIUnits
+import Numeric.Units.Dimensional.NonSI
 import Numeric.Units.Dimensional.UnitNames.InterchangeNames as I
 import Prelude hiding (exponent, recip)
 import qualified Prelude as P
@@ -41,43 +42,50 @@ buildUnitMap (u:us) = do
     n = interchangeName u
 
 allUcumUnits :: [AnyUnit]
-allUcumUnits = [ demoteUnit' metre
-               , demoteUnit' gram
-               , demoteUnit' second
-               , demoteUnit' ampere
-               , demoteUnit' kelvin
-               , demoteUnit' mole
-               , demoteUnit' candela
-               , demoteUnit' radian
-               , demoteUnit' steradian
-               , demoteUnit' hertz
-               , demoteUnit' newton
-               , demoteUnit' pascal
-               , demoteUnit' joule
-               , demoteUnit' watt
-               , demoteUnit' coulomb
-               , demoteUnit' volt
-               , demoteUnit' farad
-               , demoteUnit' ohm
-               , demoteUnit' siemens
-               , demoteUnit' weber
-               , demoteUnit' tesla
-               , demoteUnit' henry
-               , demoteUnit' lumen
-               , demoteUnit' lux
-               , demoteUnit' degreeCelsius
-               , demoteUnit' becquerel
-               , demoteUnit' gray
-               , demoteUnit' sievert
-               , demoteUnit' katal
-               , demoteUnit' degree
-               , demoteUnit' arcminute
-               , demoteUnit' arcsecond
-               , demoteUnit' degreeOfArc
-               , demoteUnit' minuteOfArc
-               , demoteUnit' secondOfArc
-               , demoteUnit' astronomicalUnit
-               ]
+allUcumUnits = allSIUnits ++
+  [ demoteUnit' inch
+  , demoteUnit' astronomicalUnit
+  ]
+
+allSIUnits :: [AnyUnit]
+allSIUnits =
+  [ demoteUnit' metre
+  , demoteUnit' gram
+  , demoteUnit' second
+  , demoteUnit' ampere
+  , demoteUnit' kelvin
+  , demoteUnit' mole
+  , demoteUnit' candela
+  , demoteUnit' radian
+  , demoteUnit' steradian
+  , demoteUnit' hertz
+  , demoteUnit' newton
+  , demoteUnit' pascal
+  , demoteUnit' joule
+  , demoteUnit' watt
+  , demoteUnit' coulomb
+  , demoteUnit' volt
+  , demoteUnit' farad
+  , demoteUnit' ohm
+  , demoteUnit' siemens
+  , demoteUnit' weber
+  , demoteUnit' tesla
+  , demoteUnit' henry
+  , demoteUnit' lumen
+  , demoteUnit' lux
+  , demoteUnit' degreeCelsius
+  , demoteUnit' becquerel
+  , demoteUnit' gray
+  , demoteUnit' sievert
+  , demoteUnit' katal
+  , demoteUnit' degree
+  , demoteUnit' arcminute
+  , demoteUnit' arcsecond
+  , demoteUnit' degreeOfArc
+  , demoteUnit' minuteOfArc
+  , demoteUnit' secondOfArc
+  , demoteUnit' astronomicalUnit
+  ]
 
 ucumSI :: Parser AnyValue
 ucumSI = ucumUnit allUcumUnits
