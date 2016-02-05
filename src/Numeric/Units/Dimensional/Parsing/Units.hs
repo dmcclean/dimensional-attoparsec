@@ -8,6 +8,7 @@ import qualified Data.Foldable as F
 import Data.HashSet (fromList)
 import Data.Maybe (mapMaybe)
 import Data.Text as T
+import Numeric.Units.Dimensional (one)
 import Numeric.Units.Dimensional.Dynamic hiding ((*), (/), recip)
 import qualified Numeric.Units.Dimensional.Dynamic as Dyn
 import Numeric.Units.Dimensional.SIUnits
@@ -15,14 +16,19 @@ import Numeric.Units.Dimensional.UnitNames
 import Prelude hiding (exponent, recip)
 import Text.Parser.Char
 import Text.Parser.Combinators
+import Text.Parser.Expression
 import Text.Parser.Token
+import Text.Parser.Token.Style (emptyOps)
 import Text.Parser.Token.Highlight
 import qualified Prelude as P
 
+{-
+Lexical Rules
+-}
 idStyle :: TokenParsing m => IdentifierStyle m
 idStyle = IdentifierStyle
           { _styleName = "identifier"
-          , _styleReserved =  fromList $ (fmap fst unaryFunctions)
+          , _styleReserved =  fromList $ (fmap fst unaryFunctions) ++ ["pi", "tau"]
           , _styleStart = letter
           , _styleLetter = alphaNum <|> char '_'
           , _styleHighlight = Identifier
@@ -35,14 +41,40 @@ identifier = ident idStyle
 reserved :: (TokenParsing m, Monad m) => String -> m ()
 reserved = reserve idStyle
 
-quantity :: (TokenParsing m, Monad m) => [AnyUnit] -> m (DynQuantity ExactPi)
-quantity us = try $ unitAsQuantity us
-          <|> unaryFunctionApplication us
+reservedOp :: (TokenParsing m, Monad m) => String -> m ()
+reservedOp = reserve emptyOps
+
+{-
+Expressions for Quantities
+-}
+expr :: (Monad m, TokenParsing m) => [AnyUnit] -> m (DynQuantity ExactPi)
+expr us = buildExpressionParser table (term us)
+      <?> "expression"
+
+term :: (Monad m, TokenParsing m) => [AnyUnit] -> m (DynQuantity ExactPi)
+term us = parens (expr us)
+      <|> unaryFunctionApplication us
+      <|> quantity us
+      <?> "simple expression"
+
+table :: (Monad m, TokenParsing m) => [[Operator m (DynQuantity ExactPi)]]
+table = [ [preop "-" negate, preop "+" id ]
+        , [binop "^" (P.**) AssocRight]
+        , [binop "*" (P.*) AssocLeft, binop "/" (P./) AssocLeft ]
+        , [binop "+" (+) AssocLeft, binop "-" (-)   AssocLeft ]
+        ]
+
+binop :: (Monad m, TokenParsing m) => String -> (a -> a -> a) -> Assoc -> Operator m a
+binop  name fun assoc = Infix (fun <$ reservedOp name) assoc
+
+preop, postop :: (Monad m, TokenParsing m) => String -> (a -> a) -> Operator m a
+preop  name fun       = Prefix (fun <$ reservedOp name)
+postop name fun       = Postfix (fun <$ reservedOp name)
 
 unaryFunctionApplication :: (TokenParsing m, Monad m) => [AnyUnit] -> m (DynQuantity ExactPi)
 unaryFunctionApplication us = unaryFunction <*> parens q
   where
-    q = quantity us
+    q = expr us
 
 unaryFunction :: (TokenParsing m, Monad m) => m (DynQuantity ExactPi -> DynQuantity ExactPi)
 unaryFunction = choice $ fmap (\(n, f) -> f <$ reserved n) unaryFunctions
@@ -69,15 +101,25 @@ unaryFunctions = [ ("abs", abs)
                  , ("atanh", atanh)
                  ]
 
-unitAsQuantity :: (TokenParsing m, Monad m) => [AnyUnit] -> m (DynQuantity ExactPi)
-unitAsQuantity us = wrap <$> unit us
+quantity :: (TokenParsing m, Monad m) => [AnyUnit] -> m (DynQuantity ExactPi)
+quantity us = wrap <$> number <*> option (Just $ demoteUnit' one) (unit us)
   where
-    wrap (Just u) = 1 *~ u
-    wrap Nothing  = invalidQuantity
+    wrap :: ExactPi -> Maybe AnyUnit -> DynQuantity ExactPi
+    wrap x (Just u) = x *~ u
+    wrap _ Nothing  = invalidQuantity
 
 unit :: (TokenParsing m, Monad m) => [AnyUnit] -> m (Maybe AnyUnit)
-unit us = token $ power <$> bareUnit us <*> optional superscriptInteger
+unit us = prod <$> some oneUnit
   where
+    prod :: [Maybe AnyUnit] -> Maybe AnyUnit
+    prod = F.foldl' (liftA2 (Dyn.*)) (Just $ (demoteUnit' one))
+    oneUnit :: (TokenParsing m, Monad m) => m (Maybe AnyUnit)
+    oneUnit = applyPowers <$> unitWithSuperscriptPower <*> many (symbolic '^' *> sign <*> decimal)
+    applyPowers :: Maybe AnyUnit -> [Integer] -> Maybe AnyUnit
+    applyPowers u (n:ns) = power (applyPowers u ns) (Just n)
+    applyPowers u _ = u
+    unitWithSuperscriptPower :: (TokenParsing m, Monad m) => m (Maybe AnyUnit)
+    unitWithSuperscriptPower = token $ power <$> bareUnit us <*> optional superscriptInteger
     power :: Maybe AnyUnit -> Maybe Integer -> Maybe AnyUnit
     power (Just u) (Just n) = Just $ u Dyn.^ n
     power u _ = u
@@ -121,14 +163,19 @@ prefix f = choice $ fmap parsePrefix siPrefixes
     parsePrefix :: (CharParsing m, Monad m) => Prefix -> m Prefix
     parsePrefix p = p <$ (string . f . prefixName $ p)
 
-integerExponent :: (TokenParsing m) => m Integer
-integerExponent = symbolic '^' *> sign <*> decimal
-
 sign :: (TokenParsing m, Num a) => m (a -> a)
 sign = highlight Operator
      $ negate <$ char '-'
    <|> id <$ char '+'
    <|> pure id
+
+number :: (TokenParsing m, Monad m) => m ExactPi
+number = pi <$ reserved "pi"
+     <|> 2 P.* pi <$ reserved "tau"
+     <|> convert <$> naturalOrScientific
+  where
+    convert (Left x) = realToFrac x
+    convert (Right x) = realToFrac x
 
 superscriptInteger :: (CharParsing m, Integral a) => m a
 superscriptInteger = superscriptSign <*> superscriptDecimal

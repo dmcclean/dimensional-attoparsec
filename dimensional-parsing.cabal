@@ -29,7 +29,7 @@ library
                        attoparsec,
                        containers >= 0.5.6,
                        dimensional >= 1.0.1 && <2,
-                       exact-pi >= 0.4.1 && < 0.5,
+                       exact-pi >= 0.4.1.1 && < 0.5,
                        parsers >= 0.12.3,
                        scientific >= 0.3.4.3 && < 0.4,
                        text >= 1.2 && < 1.3,
