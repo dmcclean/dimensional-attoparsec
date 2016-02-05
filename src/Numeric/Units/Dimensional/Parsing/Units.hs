@@ -1,11 +1,11 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 
 module Numeric.Units.Dimensional.Parsing.Units where
 
 import Control.Applicative
-import Data.Attoparsec.Text as A
 import Data.ExactPi as E
+import qualified Data.Foldable as F
+import Data.HashSet (fromList)
 import Data.Maybe (mapMaybe)
 import Data.Text as T
 import Numeric.Units.Dimensional.Dynamic hiding ((*), (/), recip)
@@ -13,112 +13,135 @@ import qualified Numeric.Units.Dimensional.Dynamic as Dyn
 import Numeric.Units.Dimensional.SIUnits
 import Numeric.Units.Dimensional.UnitNames
 import Prelude hiding (exponent, recip)
+import Text.Parser.Char
+import Text.Parser.Combinators
+import Text.Parser.Token
+import Text.Parser.Token.Highlight
 import qualified Prelude as P
 
-quantity :: [AnyUnit] -> Parser (DynQuantity ExactPi)
+idStyle :: TokenParsing m => IdentifierStyle m
+idStyle = IdentifierStyle
+          { _styleName = "identifier"
+          , _styleReserved =  fromList $ (fmap fst unaryFunctions)
+          , _styleStart = letter
+          , _styleLetter = alphaNum <|> char '_'
+          , _styleHighlight = Identifier
+          , _styleReservedHighlight = ReservedIdentifier
+          }
+
+identifier :: (TokenParsing m, Monad m) => m Text
+identifier = ident idStyle
+
+reserved :: (TokenParsing m, Monad m) => String -> m ()
+reserved = reserve idStyle
+
+quantity :: (TokenParsing m, Monad m) => [AnyUnit] -> m (DynQuantity ExactPi)
 quantity us = try $ unitAsQuantity us
           <|> unaryFunctionApplication us
 
-unaryFunctionApplication :: [AnyUnit] -> Parser (DynQuantity ExactPi)
-unaryFunctionApplication us = do
-                                f <- unaryFunction
-                                _ <- char '('
-                                x <- q
-                                _ <- char ')'
-                                return $ f x
+unaryFunctionApplication :: (TokenParsing m, Monad m) => [AnyUnit] -> m (DynQuantity ExactPi)
+unaryFunctionApplication us = unaryFunction <*> parens q
   where
     q = quantity us
 
-unaryFunction :: Parser (DynQuantity ExactPi -> DynQuantity ExactPi)
-unaryFunction = choice $ fmap (\(n, f) -> f <$ asciiCI n) fs
-  where
-    fs = [ ("abs", abs)
-         , ("signum", signum)
-         , ("sgn", signum)
-         , ("exp", exp)
-         , ("log", log)
-         , ("ln", log)
-         , ("sqrt", sqrt)
-         , ("sin", sin)
-         , ("cos", cos)
-         , ("tan", tan)
-         , ("asin", asin)
-         , ("acos", acos)
-         , ("atan", atan)
-         , ("sinh", sinh)
-         , ("cosh", cosh)
-         , ("tanh", tanh)
-         , ("asinh", asinh)
-         , ("acosh", acosh)
-         , ("atanh", atanh)
-         ]
+unaryFunction :: (TokenParsing m, Monad m) => m (DynQuantity ExactPi -> DynQuantity ExactPi)
+unaryFunction = choice $ fmap (\(n, f) -> f <$ reserved n) unaryFunctions
 
-unitAsQuantity :: [AnyUnit] -> Parser (DynQuantity ExactPi)
+unaryFunctions :: [(String, DynQuantity ExactPi -> DynQuantity ExactPi)]
+unaryFunctions = [ ("abs", abs)
+                 , ("signum", signum)
+                 , ("sgn", signum)
+                 , ("exp", exp)
+                 , ("log", log)
+                 , ("ln", log)
+                 , ("sqrt", sqrt)
+                 , ("sin", sin)
+                 , ("cos", cos)
+                 , ("tan", tan)
+                 , ("asin", asin)
+                 , ("acos", acos)
+                 , ("atan", atan)
+                 , ("sinh", sinh)
+                 , ("cosh", cosh)
+                 , ("tanh", tanh)
+                 , ("asinh", asinh)
+                 , ("acosh", acosh)
+                 , ("atanh", atanh)
+                 ]
+
+unitAsQuantity :: (TokenParsing m, Monad m) => [AnyUnit] -> m (DynQuantity ExactPi)
 unitAsQuantity us = wrap <$> unit us
   where
     wrap (Just u) = 1 *~ u
     wrap Nothing  = invalidQuantity
 
-unit :: [AnyUnit] -> Parser (Maybe AnyUnit)
-unit us = prefixedFullUnit us
-      <|> prefixedAtomicUnit us
+unit :: (TokenParsing m, Monad m) => [AnyUnit] -> m (Maybe AnyUnit)
+unit us = token $ power <$> bareUnit us <*> optional superscriptInteger
+  where
+    power :: Maybe AnyUnit -> Maybe Integer -> Maybe AnyUnit
+    power (Just u) (Just n) = Just $ u Dyn.^ n
+    power u _ = u
 
-prefixedFullUnit :: [AnyUnit] -> Parser (Maybe AnyUnit)
-prefixedFullUnit us = do
-                        p <- optional fullPrefix
-                        u <- fullAtomicUnit us
-                        return $ case p of
-                                   Just p' -> Dyn.applyPrefix p' u
-                                   Nothing -> Just u
+bareUnit :: (CharParsing m, Monad m) => [AnyUnit] -> m (Maybe AnyUnit)
+bareUnit us = try (Just <$> fullAtomicUnit us)
+          <|> try (Just <$> abbreviatedAtomicUnit us)
+          <|> try (prefixedFullUnit us)
+          <|> prefixedAtomicUnit us
 
-prefixedAtomicUnit :: [AnyUnit] -> Parser (Maybe AnyUnit)
-prefixedAtomicUnit us = do
-                          p <- optional abbreviatedPrefix
-                          u <- abbreviatedAtomicUnit us
-                          return $ case p of
-                                     Just p' -> Dyn.applyPrefix p' u
-                                     Nothing -> Just u
+prefixedFullUnit :: (CharParsing m, Monad m) => [AnyUnit] -> m (Maybe AnyUnit)
+prefixedFullUnit us = Dyn.applyPrefix <$> fullPrefix <*> fullAtomicUnit us
 
-abbreviatedAtomicUnit :: [AnyUnit] -> Parser AnyUnit
+prefixedAtomicUnit :: (CharParsing m, Monad m) => [AnyUnit] -> m (Maybe AnyUnit)
+prefixedAtomicUnit us = Dyn.applyPrefix <$> abbreviatedPrefix <*> abbreviatedAtomicUnit us
+
+abbreviatedAtomicUnit :: (CharParsing m) => [AnyUnit] -> m AnyUnit
 abbreviatedAtomicUnit = atomicUnit abbreviation_en
 
-fullAtomicUnit :: [AnyUnit] -> Parser AnyUnit
+fullAtomicUnit :: (CharParsing m) => [AnyUnit] -> m AnyUnit
 fullAtomicUnit = atomicUnit name_en
 
-atomicUnit :: (forall a.NameAtom a -> String) -> [AnyUnit] -> Parser AnyUnit
+atomicUnit :: (CharParsing m) => (forall a.NameAtom a -> String) -> [AnyUnit] -> m AnyUnit
 atomicUnit f us = choice $ mapMaybe parseUnit us
   where
-    parseUnit :: AnyUnit -> Maybe (Parser AnyUnit)
+    parseUnit :: (CharParsing m) => AnyUnit -> Maybe (m AnyUnit)
     parseUnit u = do
                     let n = anyUnitName u
                     a <- asAtomic n
-                    return $ u <$ (asciiCI . T.pack . f $ a)
+                    return $ u <$ (string . f $ a)
 
-abbreviatedPrefix :: Parser Prefix
+abbreviatedPrefix :: (CharParsing m, Monad m) => m Prefix
 abbreviatedPrefix = prefix abbreviation_en
 
-fullPrefix :: Parser Prefix
+fullPrefix :: (CharParsing m, Monad m) => m Prefix
 fullPrefix = prefix name_en
 
-prefix :: (PrefixName -> String) -> Parser Prefix
+prefix :: (CharParsing m, Monad m) => (PrefixName -> String) -> m Prefix
 prefix f = choice $ fmap parsePrefix siPrefixes
   where
-    parsePrefix :: Prefix -> Parser Prefix
-    parsePrefix p = p <$ (asciiCI . T.pack . f . prefixName $ p)
+    parsePrefix :: (CharParsing m, Monad m) => Prefix -> m Prefix
+    parsePrefix p = p <$ (string . f . prefixName $ p)
 
-integerExponent :: Parser Integer
-integerExponent = char '^' *> signed decimal
-              <|> superscriptSigned superscriptDecimal
+integerExponent :: (TokenParsing m) => m Integer
+integerExponent = symbolic '^' *> sign <*> decimal
 
-superscriptSigned :: Num a => Parser a -> Parser a
-superscriptSigned p = (negate <$> (char '\x207b' *> p))
-                  <|> (char '\x207a' *> p)
-                  <|> p
+sign :: (TokenParsing m, Num a) => m (a -> a)
+sign = highlight Operator
+     $ negate <$ char '-'
+   <|> id <$ char '+'
+   <|> pure id
 
-superscriptDecimal :: Integral a => Parser a
-superscriptDecimal = superscriptDigit
+superscriptInteger :: (CharParsing m, Integral a) => m a
+superscriptInteger = superscriptSign <*> superscriptDecimal
 
-superscriptDigit :: Integral a => Parser a
+superscriptSign :: (CharParsing m, Num a) => m (a -> a)
+superscriptSign = negate <$ char '\x207b'
+              <|> id <$ char '\x207a'
+              <|> pure id
+
+superscriptDecimal :: (CharParsing m, Num a) => m a
+superscriptDecimal = F.foldl' (\x d -> (10 P.* x) P.+ d) 0 <$> some superscriptDigit
+
+superscriptDigit :: (CharParsing m, Num a) => m a
 superscriptDigit = 1 <$ char '¹'
                <|> 2 <$ char '²'
                <|> 3 <$ char '³'
