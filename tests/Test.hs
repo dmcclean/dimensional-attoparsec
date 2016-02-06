@@ -62,26 +62,31 @@ workingExact e v = it ("Correctly Parses " ++ show e) $ do
         db = dimension b
     }-}
 
+dq = demoteQuantity
+
 workingExamples :: [(Text, AnyQuantity ExactPi)]
 workingExamples = 
-  [ ("1", demoteQuantity $ 1 *~ one)
-  , ("1 s", demoteQuantity $ 1 *~ second)
-  , ("1 kg", demoteQuantity $ 1 *~ kilo gram)
-  , ("1 kilogram", demoteQuantity $ 1 *~ kilo gram)
-  , ("1 m²", demoteQuantity $ 1 *~ square meter)
-  , ("1 m^2", demoteQuantity $ 1 *~ square meter)
-  , ("1 s⁻¹", demoteQuantity $ 1 *~ hertz)
-  , ("1 s⁺¹", demoteQuantity $ 1 *~ second)
-  , ("pi / 4", demoteQuantity $ pi / _4)
-  , ("tau", demoteQuantity $ tau)
-  , ("371 kg * 10 m", demoteQuantity $ (371 *~ kilo gram) * (10 *~ meter))
-  , ("1 km + 9 inch", demoteQuantity $ (1 *~ kilo meter) + (9 *~ inch))
+  [ ("1",               dq$ 1 *~ one)
+  , ("1 s",             dq$ 1 *~ second)
+  , ("1 kg",            dq$ 1 *~ kilo gram)
+  , ("1 kilogram",      dq$ 1 *~ kilo gram)
+  , ("1 m²",            dq$ 1 *~ square meter)
+  , ("2 m²",            dq$ 2 *~ square meter)
+  , ("(2 m)^2"),        dq$ 4 *~ square meter)
+  , ("1 m^2",           dq$ 1 *~ square meter)
+  , ("1 s⁻¹",           dq$ 1 *~ hertz)
+  , ("1 s⁺¹",           dq$ 1 *~ second)
+  , ("pi / 4",          dq$ pi / _4)
+  , ("tau",             dq$ tau)
+  , ("371 kg * 10 m",   dq$ (371 *~ kilo gram) * (10 *~ meter))
+  , ("1 km + 9 inch",   dq$ (1 *~ kilo meter) + (9 *~ inch))
+  , ("-3 W",            dq$ -3 *~ watt)
   ]
 
 workingApproximateExamples :: [(Text, AnyQuantity Double)]
 workingApproximateExamples = 
-  [ ("sin(27 degree)", demoteQuantity $ 0.45399049974 *~ one)
-  , ("3 inch + 9 m * cos(4)", demoteQuantity $ -5.80659259 *~ meter)
-  , ("0.37 AU + 9000 km", demoteQuantity $ 55360212159 *~ meter)
-  , ("log(tau)", demoteQuantity $ 1.83787706641 *~ one)
+  [ ("sin(27 degree)",        dq$ 0.45399049974 *~ one)
+  , ("3 inch + 9 m * cos(4)", dq$ -5.80659259 *~ meter)
+  , ("0.37 AU + 9000 km",     dq$ 55360212159 *~ meter)
+  , ("log(tau)",              dq$ 1.83787706641 *~ one)
   ]
