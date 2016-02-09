@@ -16,6 +16,7 @@ import Numeric.Units.Dimensional.Prelude
 import Numeric.Units.Dimensional.Dynamic (DynQuantity, AnyQuantity, demoteQuantity)
 import Numeric.Units.Dimensional.NonSI
 import qualified Numeric.Units.Dimensional.Dynamic as Dyn
+import qualified Prelude as P
 
 main :: IO ()
 main = hspec spec
@@ -85,6 +86,7 @@ workingExamples =
   , ("12 mile - 7 yard",      dq$ (12 *~ mile) - (7 *~ yard))
   , ("-3 W",                  dq$ -3 *~ watt)
   , ("6.022e23",              dq$ 6.022e23 *~ one)
+  , ("2^-15 radian",          dq$ ((2 P.^^ -15) *~ radian))
   ]
 
 workingApproximateExamples :: [(Text, AnyQuantity Double)]
