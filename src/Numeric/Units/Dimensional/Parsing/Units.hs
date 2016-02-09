@@ -74,7 +74,7 @@ postop name fun       = Postfix (fun <$ reservedOp name)
 -- When we raise a dynamic quantity to an exact dimensionless integer power, we can use the more dimensionally-lenient ^ operator.
 -- When the exponent does not meet these conditions we fall back to the ** operator.
 exponentiation :: DynQuantity ExactPi -> DynQuantity ExactPi -> DynQuantity ExactPi
-exponentiation x y | Just y' <- y /~ demoteUnit one, Just y'' <- toExactInteger y' = x P.^ y''
+exponentiation x y | Just y' <- y /~ demoteUnit' one, Just y'' <- toExactInteger y' = x P.^ y''
                    | otherwise = x ** y
 
 unaryFunctionApplication :: (TokenParsing m, Monad m) => [AnyUnit] -> m (DynQuantity ExactPi)
@@ -131,15 +131,10 @@ unit us = prod <$> some oneUnit
     power u _ = u
 
 bareUnit :: (CharParsing m, Monad m) => [AnyUnit] -> m (Maybe AnyUnit)
-bareUnit us = safe (Just <$> fullAtomicUnit us)
-          <|> safe (Just <$> abbreviatedAtomicUnit us)
-          <|> safe (prefixedFullUnit us)
-          <|> safe (prefixedAtomicUnit us)
-  where
-    safe x = try (do{ r <- x
-                      ; notFollowedBy alphaNum
-                      ; return r
-                      })
+bareUnit us = try (Just <$> fullAtomicUnit us)
+          <|> try (Just <$> abbreviatedAtomicUnit us)
+          <|> try (prefixedFullUnit us)
+          <|> try (prefixedAtomicUnit us)
 
 prefixedFullUnit :: (CharParsing m, Monad m) => [AnyUnit] -> m (Maybe AnyUnit)
 prefixedFullUnit us = Dyn.applyPrefix <$> fullPrefix <*> fullAtomicUnit us
@@ -160,7 +155,7 @@ atomicUnit f us = choice $ mapMaybe parseUnit us
     parseUnit u = do
                     let n = anyUnitName u
                     a <- asAtomic n
-                    return $ u <$ (string . f $ a)
+                    return $ u <$ (string . f $ a) <* notFollowedBy letter
 
 abbreviatedPrefix :: (CharParsing m, Monad m) => m Prefix
 abbreviatedPrefix = prefix abbreviation_en
