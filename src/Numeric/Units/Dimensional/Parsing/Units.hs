@@ -108,11 +108,22 @@ unaryFunctions = [ ("abs", abs)
                  ]
 
 quantity :: (TokenParsing m, Monad m) => [AnyUnit] -> m (DynQuantity ExactPi)
-quantity us = wrap <$> number <*> option (Just $ demoteUnit' one) (unit us)
+quantity us = wrap <$> numberWithPowers <*> option (Just $ demoteUnit' one) (unit us)
   where
     wrap :: ExactPi -> Maybe AnyUnit -> DynQuantity ExactPi
     wrap x (Just u) = x *~ u
     wrap _ Nothing  = invalidQuantity
+
+numberWithPowers :: (TokenParsing m, Monad m) => m ExactPi
+numberWithPowers = token $ applyPowers <$> numberWithSuperscriptPower <*> many (symbolic '^' *> sign <*> decimal)
+  where
+    numberWithSuperscriptPower = power <$> number <*> optional superscriptInteger
+    applyPowers :: ExactPi -> [Integer] -> ExactPi
+    applyPowers x (n:ns) = (applyPowers x ns) ^^ n
+    applyPowers x _ = x
+    power :: ExactPi -> Maybe Integer -> ExactPi
+    power x (Just n) = x ^^ n
+    power x _ = x
 
 unit :: (TokenParsing m, Monad m) => [AnyUnit] -> m (Maybe AnyUnit)
 unit us = prod <$> some oneUnit
