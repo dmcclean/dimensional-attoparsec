@@ -97,6 +97,8 @@ workingApproximateExamples =
   , ("log(tau)",              dq$ 1.83787706641 *~ one)
   , ("sqrt(1 mile^2)",        dq$ 1.609344 *~ kilo meter)
   , ("sqrt(43)",              dq$ 6.5574385243 *~ one)
+  , ("exp(1)",                dq$ 2.71828182846 *~ one)
+  , ("abs(log(2^-7 degree))", dq$ 8.90025723 *~ one)
   ]
 
 examplesWithNoValue :: [Text]
