@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NegativeLiterals #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -62,6 +63,7 @@ workingExact e v = it ("Correctly Parses " ++ show e) $ do
         db = dimension b
     }-}
 
+dq :: (KnownDimension d) => Quantity d a -> AnyQuantity a
 dq = demoteQuantity
 
 workingExamples :: [(Text, AnyQuantity ExactPi)]
@@ -72,7 +74,8 @@ workingExamples =
   , ("1 kilogram",      dq$ 1 *~ kilo gram)
   , ("1 m²",            dq$ 1 *~ square meter)
   , ("2 m²",            dq$ 2 *~ square meter)
-  , ("(2 m)^2"),        dq$ 4 *~ square meter)
+  , ("(2 m)^2",         dq$ 4 *~ square meter)
+  , ("9 mm",            dq$ 9 *~ milli meter)
   , ("1 m^2",           dq$ 1 *~ square meter)
   , ("1 s⁻¹",           dq$ 1 *~ hertz)
   , ("1 s⁺¹",           dq$ 1 *~ second)
