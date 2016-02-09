@@ -35,6 +35,9 @@ idStyle = IdentifierStyle
           , _styleReservedHighlight = ReservedIdentifier
           }
 
+whiteSpace :: TokenParsing m => m ()
+whiteSpace = Text.Parser.Token.whiteSpace
+
 identifier :: (TokenParsing m, Monad m) => m Text
 identifier = ident idStyle
 
