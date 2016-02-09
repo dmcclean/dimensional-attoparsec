@@ -6,6 +6,7 @@
 import Test.Hspec
 import Data.AEq
 import Data.Text as T
+import Data.Either (either)
 import Data.Maybe (fromMaybe)
 import Data.Attoparsec.Text (parseOnly, endOfInput)
 import Numeric.Units.Dimensional.Parsing.Units (expr)
@@ -26,42 +27,32 @@ spec = describe "Unit Parser" $ do
              mapM_ (uncurry workingExact) workingExamples
            describe "Approximate Quantities" $
              mapM_ (uncurry workingApprox) workingApproximateExamples
+           describe "Ill-Dimensioned With No Value" $
+             mapM_ parsesButHasNoValue examplesWithNoValue
 
 parse :: Text -> Either String (DynQuantity ExactPi)
 parse = parseOnly (expr allUcumUnits <* endOfInput)
 
 workingApprox :: Text -> AnyQuantity Double -> Spec
 workingApprox e v = it ("Correctly Parses " ++ show e ++ " with Approximate Value " ++ show v) $ do
-                      parse e `shouldSatisfy` matches v
-  where
-    matches :: AnyQuantity Double -> (Either String (DynQuantity ExactPi)) -> Bool
-    matches _ (Left _)  = False
-    matches a (Right b) = fromMaybe False $ do
-                            let d = dimension a
-                            let u = Dyn.siUnit d
-                            a' <- a Dyn./~ u
-                            b' <- b Dyn./~ u
-                            return $ a' ~== approximateValue b'
+                      parse e `shouldSatisfy` matchesOn (\a b -> a ~== approximateValue b) v
 
 workingExact :: Text -> AnyQuantity ExactPi -> Spec
 workingExact e v = it ("Correctly Parses " ++ show e) $ do
-                     parse e `shouldSatisfy` matches v
-  where
-    matches :: AnyQuantity ExactPi -> (Either String (DynQuantity ExactPi)) -> Bool
-    matches _ (Left _)  = False
-    matches a (Right b) = fromMaybe False $ do
+                     parse e `shouldSatisfy` matchesOn areExactlyEqual v
+
+parsesButHasNoValue :: Text -> Spec
+parsesButHasNoValue e = it ("Correctly Parses and Assigns No Value to " ++ show e) $ do
+                          parse e `shouldSatisfy` either (const False) ((== Nothing) . Dyn.dynamicDimension)
+
+matchesOn :: (Floating a) => (a -> ExactPi -> Bool) -> AnyQuantity a -> (Either String (DynQuantity ExactPi)) -> Bool
+matchesOn _ _ (Left _) = False
+matchesOn f a (Right b) = fromMaybe False $ do
                             let d = dimension a
                             let u = Dyn.siUnit d
                             a' <- a Dyn./~ u
                             b' <- b Dyn./~ u
-                            return $ areExactlyEqual a' b'
-
-    {-
-    matches a (Right b) | da == db = fromMaybe False $ areExactlyEqual <$> (a Dyn./~ siUnit da) <$> (b Dyn./~ siUnit db)
-      where
-        da = dimension a
-        db = dimension b
-    }-}
+                            return $ f a' b'
 
 dq :: (KnownDimension d) => Quantity d a -> AnyQuantity a
 dq = demoteQuantity
@@ -95,4 +86,14 @@ workingApproximateExamples =
   , ("3 inch + 9 m * cos(4)", dq$ -5.80659259 *~ meter)
   , ("0.37 AU + 9000 km",     dq$ 55360212159 *~ meter)
   , ("log(tau)",              dq$ 1.83787706641 *~ one)
+  , ("sqrt(1 mile^2)",       dq$ 1.609344 *~ kilo meter)
+  , ("sqrt(43)",              dq$ 6.5574385243 *~ one)
+  ]
+
+examplesWithNoValue :: [Text]
+examplesWithNoValue =
+  [ "sin(12 m)"
+  , "1 ft + 3 A"
+  , "1m - 1 kg"
+  , "sqrt(15 s)"
   ]
