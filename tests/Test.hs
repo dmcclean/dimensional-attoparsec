@@ -6,7 +6,7 @@
 import Test.Hspec
 import Data.AEq
 import Data.Text as T
-import Data.Either (either)
+import Data.Either (either, isLeft)
 import Data.Maybe (fromMaybe)
 import Data.Attoparsec.Text (parseOnly, endOfInput)
 import Numeric.Units.Dimensional.Parsing.Units (expr)
@@ -29,6 +29,8 @@ spec = describe "Unit Parser" $ do
              mapM_ (uncurry workingApprox) workingApproximateExamples
            describe "Ill-Dimensioned With No Value" $
              mapM_ parsesButHasNoValue examplesWithNoValue
+         describe "Incorrect Parses" $ do
+           mapM_ doesNotParse examplesThatShouldNotParse
 
 parse :: Text -> Either String (DynQuantity ExactPi)
 parse = parseOnly (expr allUcumUnits <* endOfInput)
@@ -44,6 +46,10 @@ workingExact e v = it ("Correctly Parses " ++ show e) $ do
 parsesButHasNoValue :: Text -> Spec
 parsesButHasNoValue e = it ("Correctly Parses and Assigns No Value to " ++ show e) $ do
                           parse e `shouldSatisfy` either (const False) ((== Nothing) . Dyn.dynamicDimension)
+
+doesNotParse :: Text -> Spec
+doesNotParse e = it ("Does Not Parse " ++ show e) $ do
+                   parse e `shouldSatisfy` isLeft
 
 matchesOn :: (Floating a) => (a -> ExactPi -> Bool) -> AnyQuantity a -> (Either String (DynQuantity ExactPi)) -> Bool
 matchesOn _ _ (Left _) = False
@@ -78,6 +84,7 @@ workingExamples =
   , ("1 km + 9 inch",         dq$ (1 *~ kilo meter) + (9 *~ inch))
   , ("12 mile - 7 yard",      dq$ (12 *~ mile) - (7 *~ yard))
   , ("-3 W",                  dq$ -3 *~ watt)
+  , ("6.022e23",              dq$ 6.022e23 *~ one)
   ]
 
 workingApproximateExamples :: [(Text, AnyQuantity Double)]
@@ -86,7 +93,7 @@ workingApproximateExamples =
   , ("3 inch + 9 m * cos(4)", dq$ -5.80659259 *~ meter)
   , ("0.37 AU + 9000 km",     dq$ 55360212159 *~ meter)
   , ("log(tau)",              dq$ 1.83787706641 *~ one)
-  , ("sqrt(1 mile^2)",       dq$ 1.609344 *~ kilo meter)
+  , ("sqrt(1 mile^2)",        dq$ 1.609344 *~ kilo meter)
   , ("sqrt(43)",              dq$ 6.5574385243 *~ one)
   ]
 
@@ -96,4 +103,13 @@ examplesWithNoValue =
   , "1 ft + 3 A"
   , "1m - 1 kg"
   , "sqrt(15 s)"
+  , "3 kft" -- because ft is not a metric unit
+  ]
+
+examplesThatShouldNotParse :: [Text]
+examplesThatShouldNotParse =
+  [ ""
+  , "3 kgms^2"
+  , "kg 3"
+  , "foo(2 m)"
   ]
