@@ -78,6 +78,8 @@ workingExamples =
   , ("1 m^-2",                dq$ 1 *~ (meter ^ neg2))
   , ("1 s⁻¹",                 dq$ 1 *~ hertz)
   , ("1 s⁺¹",                 dq$ 1 *~ second)
+  , ("1 m s^-1",              dq$ 1 *~ (meter / second))
+  , ("1 m s⁻¹",               dq$ 1 *~ (meter / second))
   , ("1 kg m second^-2",      dq$ 1 *~ (kilo gram * meter * second^neg2))
   , ("pi / 4",                dq$ pi / _4)
   , ("tau",                   dq$ tau)
