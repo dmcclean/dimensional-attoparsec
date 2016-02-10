@@ -9,7 +9,7 @@ import Data.Text as T
 import Data.Either (either, isLeft)
 import Data.Maybe (fromMaybe)
 import Data.Attoparsec.Text (parseOnly, endOfInput)
-import Numeric.Units.Dimensional.Parsing.Units (expr)
+import Numeric.Units.Dimensional.Parsing.Units (expr, whiteSpace)
 import Numeric.Units.Dimensional.Parsing.UCUM (allUcumUnits)
 import Data.ExactPi
 import Numeric.Units.Dimensional.Prelude
@@ -34,7 +34,7 @@ spec = describe "Unit Parser" $ do
            mapM_ doesNotParse examplesThatShouldNotParse
 
 parse :: Text -> Either String (DynQuantity ExactPi)
-parse = parseOnly (expr allUcumUnits <* endOfInput)
+parse = parseOnly (whiteSpace *> expr allUcumUnits <* endOfInput)
 
 workingApprox :: Text -> AnyQuantity Double -> Spec
 workingApprox e v = it ("Correctly Parses " ++ show e ++ " with Approximate Value " ++ show v) $ do
@@ -79,6 +79,7 @@ workingExamples =
   , ("1 s⁻¹",                 dq$ 1 *~ hertz)
   , ("1 s⁺¹",                 dq$ 1 *~ second)
   , ("1 m s^-1",              dq$ 1 *~ (meter / second))
+  , (" 1 m s^-1 ",            dq$ 1 *~ (meter / second))
   , ("1 m s⁻¹",               dq$ 1 *~ (meter / second))
   , ("1 kg m second^-2",      dq$ 1 *~ (kilo gram * meter * second^neg2))
   , ("pi / 4",                dq$ pi / _4)

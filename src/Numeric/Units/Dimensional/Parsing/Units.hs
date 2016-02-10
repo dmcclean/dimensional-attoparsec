@@ -134,12 +134,12 @@ unit us = prod <$> some oneUnit
     prod :: [Maybe AnyUnit] -> Maybe AnyUnit
     prod = F.foldl' (liftA2 (Dyn.*)) (Just $ (demoteUnit' one))
     oneUnit :: (TokenParsing m, Monad m) => m (Maybe AnyUnit)
-    oneUnit = applyPowers <$> unitWithSuperscriptPower <*> many (symbolic '^' *> sign <*> decimal)
+    oneUnit = token $ applyPowers <$> unitWithSuperscriptPower <*> many (symbolic '^' *> sign <*> decimal)
     applyPowers :: Maybe AnyUnit -> [Integer] -> Maybe AnyUnit
     applyPowers u (n:ns) = power (applyPowers u ns) (Just n)
     applyPowers u _ = u
     unitWithSuperscriptPower :: (TokenParsing m, Monad m) => m (Maybe AnyUnit)
-    unitWithSuperscriptPower = token $ power <$> bareUnit us <*> optional superscriptInteger
+    unitWithSuperscriptPower = power <$> bareUnit us <*> optional superscriptInteger
     power :: Maybe AnyUnit -> Maybe Integer -> Maybe AnyUnit
     power (Just u) (Just n) = Just $ u Dyn.^ n
     power u _ = u
