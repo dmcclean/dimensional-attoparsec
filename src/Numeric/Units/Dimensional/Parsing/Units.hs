@@ -8,8 +8,9 @@ import qualified Data.Foldable as F
 import Data.HashSet (fromList)
 import Data.Maybe (mapMaybe)
 import Data.Text as T
-import Numeric.Units.Dimensional (one)
-import Numeric.Units.Dimensional.Dynamic hiding ((*), (/), recip)
+import qualified Data.Map as Map
+import Numeric.Units.Dimensional (one, (*~))
+import Numeric.Units.Dimensional.Dynamic hiding ((*~), (*), (/), recip)
 import qualified Numeric.Units.Dimensional.Dynamic as Dyn
 import Numeric.Units.Dimensional.SIUnits
 import Numeric.Units.Dimensional.UnitNames
@@ -22,13 +23,48 @@ import Text.Parser.Token.Style (emptyOps)
 import Text.Parser.Token.Highlight
 import qualified Prelude as P
 
+data LanguageDefinition = LanguageDefinition 
+                          { units :: [AnyUnit]
+                          , unaryFunctions :: Map.Map String (DynQuantity ExactPi -> DynQuantity ExactPi)
+                          , constants :: Map.Map String (DynQuantity ExactPi)
+                          , allowPrefixPositiveSign :: Bool
+                          , allowSuperscriptExponentiation :: Bool
+                          }
+
+defaultConstants :: Map.Map String (DynQuantity ExactPi)
+defaultConstants = Map.fromList [ ("pi",  demoteQuantity $ pi *~ one)
+                                , ("tau", demoteQuantity $ (2 P.* pi) *~ one)
+                                ]
+
+defaultUnaryFunctions :: Map.Map String (DynQuantity ExactPi -> DynQuantity ExactPi)
+defaultUnaryFunctions = Map.fromList [ ("abs", abs)
+                                     , ("signum", signum)
+                                     , ("sgn", signum)
+                                     , ("exp", exp)
+                                     , ("log", log)
+                                     , ("ln", log)
+                                     , ("sqrt", sqrt)
+                                     , ("sin", sin)
+                                     , ("cos", cos)
+                                     , ("tan", tan)
+                                     , ("asin", asin)
+                                     , ("acos", acos)
+                                     , ("atan", atan)
+                                     , ("sinh", sinh)
+                                     , ("cosh", cosh)
+                                     , ("tanh", tanh)
+                                     , ("asinh", asinh)
+                                     , ("acosh", acosh)
+                                     , ("atanh", atanh)
+                                     ]
+
 {-
 Lexical Rules
 -}
 idStyle :: TokenParsing m => IdentifierStyle m
 idStyle = IdentifierStyle
           { _styleName = "identifier"
-          , _styleReserved =  fromList $ (fmap fst unaryFunctions) ++ ["pi", "tau"]
+          , _styleReserved =  fromList $ (Map.keys defaultUnaryFunctions) ++ ["pi", "tau"]
           , _styleStart = letter
           , _styleLetter = alphaNum <|> char '_'
           , _styleHighlight = Identifier
@@ -86,35 +122,13 @@ unaryFunctionApplication us = unaryFunction <*> parens q
     q = expr us
 
 unaryFunction :: (TokenParsing m, Monad m) => m (DynQuantity ExactPi -> DynQuantity ExactPi)
-unaryFunction = choice $ fmap (\(n, f) -> f <$ reserved n) unaryFunctions
-
-unaryFunctions :: [(String, DynQuantity ExactPi -> DynQuantity ExactPi)]
-unaryFunctions = [ ("abs", abs)
-                 , ("signum", signum)
-                 , ("sgn", signum)
-                 , ("exp", exp)
-                 , ("log", log)
-                 , ("ln", log)
-                 , ("sqrt", sqrt)
-                 , ("sin", sin)
-                 , ("cos", cos)
-                 , ("tan", tan)
-                 , ("asin", asin)
-                 , ("acos", acos)
-                 , ("atan", atan)
-                 , ("sinh", sinh)
-                 , ("cosh", cosh)
-                 , ("tanh", tanh)
-                 , ("asinh", asinh)
-                 , ("acosh", acosh)
-                 , ("atanh", atanh)
-                 ]
+unaryFunction = choice $ fmap (\(n, f) -> f <$ reserved n) (Map.toList defaultUnaryFunctions)
 
 quantity :: (TokenParsing m, Monad m) => [AnyUnit] -> m (DynQuantity ExactPi)
 quantity us = wrap <$> numberWithPowers <*> option (Just $ demoteUnit' one) (unit us)
   where
     wrap :: ExactPi -> Maybe AnyUnit -> DynQuantity ExactPi
-    wrap x (Just u) = x *~ u
+    wrap x (Just u) = x Dyn.*~ u
     wrap _ Nothing  = invalidQuantity
 
 numberWithPowers :: (TokenParsing m, Monad m) => m ExactPi
