@@ -24,39 +24,46 @@ import Text.Parser.Token.Highlight
 import qualified Prelude as P
 
 data LanguageDefinition = LanguageDefinition 
-                          { units :: [AnyUnit]
-                          , unaryFunctions :: Map.Map String (DynQuantity ExactPi -> DynQuantity ExactPi)
-                          , constants :: Map.Map String (DynQuantity ExactPi)
-                          , allowPrefixPositiveSign :: Bool
-                          , allowSuperscriptExponentiation :: Bool
+                        { units :: [AnyUnit]
+                        , constants :: Map.Map String (DynQuantity ExactPi)
+                        , unaryFunctions :: Map.Map String (DynQuantity ExactPi -> DynQuantity ExactPi)
+                        , allowPrefixPositiveSign :: Bool
+                        , allowSuperscriptExponentiation :: Bool
+                        , identifierStart :: forall m.(CharParsing m) => m Char
+                        , identifierLetter :: forall m.(CharParsing m) => m Char
+                        }
+
+defaultLanguageDefinition :: LanguageDefinition
+defaultLanguageDefinition = LanguageDefinition
+                          { units = []
+                          , constants = Map.fromList [ ("pi",  demoteQuantity $ pi *~ one)
+                                                     , ("tau", demoteQuantity $ (2 P.* pi) *~ one)
+                                                     ]
+                          , unaryFunctions = Map.fromList [ ("abs", abs)
+                                                          , ("signum", signum)
+                                                          , ("sgn", signum)
+                                                          , ("exp", exp)
+                                                          , ("log", log)
+                                                          , ("ln", log)
+                                                          , ("sqrt", sqrt)
+                                                          , ("sin", sin)
+                                                          , ("cos", cos)
+                                                          , ("tan", tan)
+                                                          , ("asin", asin)
+                                                          , ("acos", acos)
+                                                          , ("atan", atan)
+                                                          , ("sinh", sinh)
+                                                          , ("cosh", cosh)
+                                                          , ("tanh", tanh)
+                                                          , ("asinh", asinh)
+                                                          , ("acosh", acosh)
+                                                          , ("atanh", atanh)
+                                                          ]
+                          , allowPrefixPositiveSign = True
+                          , allowSuperscriptExponentiation = True
+                          , identifierStart = letter
+                          , identifierLetter = alphaNum <|> char '_'
                           }
-
-defaultConstants :: Map.Map String (DynQuantity ExactPi)
-defaultConstants = Map.fromList [ ("pi",  demoteQuantity $ pi *~ one)
-                                , ("tau", demoteQuantity $ (2 P.* pi) *~ one)
-                                ]
-
-defaultUnaryFunctions :: Map.Map String (DynQuantity ExactPi -> DynQuantity ExactPi)
-defaultUnaryFunctions = Map.fromList [ ("abs", abs)
-                                     , ("signum", signum)
-                                     , ("sgn", signum)
-                                     , ("exp", exp)
-                                     , ("log", log)
-                                     , ("ln", log)
-                                     , ("sqrt", sqrt)
-                                     , ("sin", sin)
-                                     , ("cos", cos)
-                                     , ("tan", tan)
-                                     , ("asin", asin)
-                                     , ("acos", acos)
-                                     , ("atan", atan)
-                                     , ("sinh", sinh)
-                                     , ("cosh", cosh)
-                                     , ("tanh", tanh)
-                                     , ("asinh", asinh)
-                                     , ("acosh", acosh)
-                                     , ("atanh", atanh)
-                                     ]
 
 {-
 Lexical Rules
@@ -64,9 +71,9 @@ Lexical Rules
 idStyle :: TokenParsing m => IdentifierStyle m
 idStyle = IdentifierStyle
           { _styleName = "identifier"
-          , _styleReserved =  fromList $ (Map.keys defaultUnaryFunctions) ++ ["pi", "tau"]
-          , _styleStart = letter
-          , _styleLetter = alphaNum <|> char '_'
+          , _styleReserved =  fromList $ (Map.keys $ unaryFunctions defaultLanguageDefinition) ++ ["pi", "tau"]
+          , _styleStart = identifierStart defaultLanguageDefinition
+          , _styleLetter = identifierLetter defaultLanguageDefinition
           , _styleHighlight = Identifier
           , _styleReservedHighlight = ReservedIdentifier
           }
@@ -104,11 +111,10 @@ table = [ [preop "-" negate, preop "+" id ]
         ]
 
 binop :: (Monad m, TokenParsing m) => String -> (a -> a -> a) -> Assoc -> Operator m a
-binop  name fun assoc = Infix (fun <$ reservedOp name) assoc
+binop name fun assoc = Infix (fun <$ reservedOp name) assoc
 
-preop, postop :: (Monad m, TokenParsing m) => String -> (a -> a) -> Operator m a
-preop  name fun       = Prefix (fun <$ reservedOp name)
-postop name fun       = Postfix (fun <$ reservedOp name)
+preop :: (Monad m, TokenParsing m) => String -> (a -> a) -> Operator m a
+preop name fun = Prefix (fun <$ reservedOp name)
 
 -- When we raise a dynamic quantity to an exact dimensionless integer power, we can use the more dimensionally-lenient ^ operator.
 -- When the exponent does not meet these conditions we fall back to the ** operator.
@@ -122,7 +128,7 @@ unaryFunctionApplication us = unaryFunction <*> parens q
     q = expr us
 
 unaryFunction :: (TokenParsing m, Monad m) => m (DynQuantity ExactPi -> DynQuantity ExactPi)
-unaryFunction = choice $ fmap (\(n, f) -> f <$ reserved n) (Map.toList defaultUnaryFunctions)
+unaryFunction = choice $ fmap (\(n, f) -> f <$ reserved n) (Map.toList $ unaryFunctions defaultLanguageDefinition)
 
 quantity :: (TokenParsing m, Monad m) => [AnyUnit] -> m (DynQuantity ExactPi)
 quantity us = wrap <$> numberWithPowers <*> option (Just $ demoteUnit' one) (unit us)
