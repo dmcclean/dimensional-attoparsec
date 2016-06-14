@@ -51,6 +51,8 @@ test-suite tests
   ghc-options:         -Wall
   build-depends:       dimensional-parsers,
                        dimensional,
+                       dimensional-codata,
+                       containers,
                        exact-pi,
                        hspec,
                        text,

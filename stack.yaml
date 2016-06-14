@@ -9,7 +9,7 @@ packages:
 - '..\dimensional'
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
-extra-deps: [ 'exact-pi-0.4.1.1' ]
+extra-deps: [ 'exact-pi-0.4.1.1', 'dimensional-codata-2014.0.0.0' ]
 
 # Override default flag values for local packages and extra-deps
 flags: {}

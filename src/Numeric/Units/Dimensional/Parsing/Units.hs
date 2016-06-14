@@ -27,7 +27,7 @@ import qualified Prelude as P
 
 data LanguageDefinition = LanguageDefinition 
                         { units :: [AnyUnit]
-                        , constants :: Map.Map String (DynQuantity ExactPi)
+                        , constants :: Map.Map String (AnyQuantity ExactPi)
                         , unaryFunctions :: Map.Map String (DynQuantity ExactPi -> DynQuantity ExactPi)
                         , allowPrefixPositiveSign :: Bool
                         , allowSuperscriptExponentiation :: Bool
@@ -109,6 +109,7 @@ term :: (MonadReader LanguageDefinition m, TokenParsing m) => [AnyUnit] -> m (Dy
 term us = parens (expr us)
       <|> unaryFunctionApplication us
       <|> quantity us
+      <|> constant
       <?> "simple expression"
 
 table :: (Monad m, TokenParsing m) => [[Operator m (DynQuantity ExactPi)]]
@@ -220,12 +221,29 @@ sign = highlight Operator
    <|> pure id
 
 number :: (TokenParsing m, MonadReader LanguageDefinition m) => m ExactPi
-number = pi <$ reserved "pi"
-     <|> 2 P.* pi <$ reserved "tau"
+number = dimensionlessConstant
      <|> convert <$> naturalOrScientific
   where
     convert (Left x) = realToFrac x
     convert (Right x) = realToFrac x
+
+dimensionlessConstant :: (TokenParsing m, MonadReader LanguageDefinition m) => m ExactPi
+dimensionlessConstant = do
+                          cs <- asks constants
+                          let ps = fmap (uncurry makeConstant) . Map.toList $ Map.mapMaybe (Dyn./~ (demoteUnit' one)) cs
+                          choice ps
+  where
+    makeConstant :: (TokenParsing m, MonadReader LanguageDefinition m) => String -> ExactPi -> m ExactPi
+    makeConstant n v = v <$ reserved n
+
+constant :: (TokenParsing m, MonadReader LanguageDefinition m) => m (DynQuantity ExactPi)
+constant = do
+             cs <- asks constants
+             let ps = fmap (uncurry makeConstant) $ Map.toList cs
+             choice ps
+  where
+    makeConstant :: (TokenParsing m, MonadReader LanguageDefinition m) => String -> AnyQuantity ExactPi -> m (DynQuantity ExactPi)
+    makeConstant n v = (demoteQuantity v) <$ reserved n
 
 superscriptInteger :: (CharParsing m, Integral a) => m a
 superscriptInteger = superscriptSign <*> superscriptDecimal

@@ -9,13 +9,15 @@ import Data.AEq
 import Data.Text as T
 import Data.Either (either, isLeft)
 import Data.Maybe (fromMaybe)
+import qualified Data.Map as Map
 import Data.Attoparsec.Text (parseOnly, endOfInput)
-import Numeric.Units.Dimensional.Parsing.Units (expr, whiteSpace, defaultLanguageDefinition)
+import Numeric.Units.Dimensional.Parsing.Units (expr, whiteSpace, defaultLanguageDefinition, LanguageDefinition(..))
 import Numeric.Units.Dimensional.Parsing.UCUM (allUcumUnits)
 import Data.ExactPi
 import Numeric.Units.Dimensional.Prelude
 import Numeric.Units.Dimensional.Dynamic (DynQuantity, AnyQuantity, demoteQuantity)
 import Numeric.Units.Dimensional.NonSI
+import Numeric.Units.Dimensional.Codata
 import qualified Numeric.Units.Dimensional.Dynamic as Dyn
 import qualified Prelude as P
 
@@ -34,8 +36,11 @@ spec = describe "Unit Parser" $ do
          describe "Incorrect Parses" $ do
            mapM_ doesNotParse examplesThatShouldNotParse
 
+lang :: LanguageDefinition
+lang = defaultLanguageDefinition { constants = Map.insert "c" (demoteQuantity speedOfLightInVacuum) $ constants defaultLanguageDefinition }
+
 parse :: Text -> Either String (DynQuantity ExactPi)
-parse = let e = runReaderT (expr allUcumUnits) defaultLanguageDefinition
+parse = let e = runReaderT (expr allUcumUnits) lang
          in parseOnly (whiteSpace *> e <* endOfInput)
 
 workingApprox :: Text -> AnyQuantity Double -> Spec
@@ -92,6 +97,7 @@ workingExamples =
   , ("-3 W",                  dq$ -3 *~ watt)
   , ("6.022e23",              dq$ 6.022e23 *~ one)
   , ("2^-15 radian",          dq$ ((2 P.^^ -15) *~ radian))
+  , ("0.3 * c",               dq$ (0.3 *~ one) * speedOfLightInVacuum)
   ]
 
 workingApproximateExamples :: [(Text, AnyQuantity Double)]
