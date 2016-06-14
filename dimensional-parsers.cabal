@@ -33,7 +33,8 @@ library
                        parsers >= 0.12.3,
                        scientific >= 0.3.4.3 && < 0.4,
                        text >= 1.2 && < 1.3,
-                       unordered-containers >= 0.2.5
+                       unordered-containers >= 0.2.5,
+                       mtl
   hs-source-dirs:      src
   ghc-options:         -Wall
   default-language:    Haskell2010
@@ -55,4 +56,5 @@ test-suite tests
                        text,
                        attoparsec,
                        ieee754,
+                       mtl,
                        base

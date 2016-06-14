@@ -1,8 +1,10 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE RankNTypes #-}
 
 module Numeric.Units.Dimensional.Parsing.Units where
 
 import Control.Applicative
+import Control.Monad.Reader
 import Data.ExactPi as E
 import qualified Data.Foldable as F
 import Data.HashSet (fromList)
@@ -68,24 +70,30 @@ defaultLanguageDefinition = LanguageDefinition
 {-
 Lexical Rules
 -}
-idStyle :: TokenParsing m => IdentifierStyle m
-idStyle = IdentifierStyle
-          { _styleName = "identifier"
-          , _styleReserved =  fromList $ (Map.keys $ unaryFunctions defaultLanguageDefinition) ++ ["pi", "tau"]
-          , _styleStart = identifierStart defaultLanguageDefinition
-          , _styleLetter = identifierLetter defaultLanguageDefinition
-          , _styleHighlight = Identifier
-          , _styleReservedHighlight = ReservedIdentifier
-          }
+idStyle :: (TokenParsing m, MonadReader LanguageDefinition m) => m (IdentifierStyle m)
+idStyle = do
+            ufs <- asks unaryFunctions
+            s <- asks identifierStart
+            l <- asks identifierLetter
+            return $ IdentifierStyle
+                       { _styleName = "identifier"
+                       , _styleReserved = fromList $ (Map.keys ufs) ++ ["pi", "tau"]
+                       , _styleStart = s
+                       , _styleLetter = l
+                       , _styleHighlight = Identifier
+                       , _styleReservedHighlight = ReservedIdentifier
+                       }
 
 whiteSpace :: TokenParsing m => m ()
 whiteSpace = Text.Parser.Token.whiteSpace
 
-identifier :: (TokenParsing m, Monad m) => m Text
-identifier = ident idStyle
+identifier :: (TokenParsing m, MonadReader LanguageDefinition m) => m Text
+identifier = idStyle >>= ident
 
-reserved :: (TokenParsing m, Monad m) => String -> m ()
-reserved = reserve idStyle
+reserved :: (TokenParsing m, MonadReader LanguageDefinition m) => String -> m ()
+reserved name = do
+                  s <- idStyle
+                  reserve s name
 
 reservedOp :: (TokenParsing m, Monad m) => String -> m ()
 reservedOp = reserve emptyOps
@@ -93,11 +101,11 @@ reservedOp = reserve emptyOps
 {-
 Expressions for Quantities
 -}
-expr :: (Monad m, TokenParsing m) => [AnyUnit] -> m (DynQuantity ExactPi)
+expr :: (MonadReader LanguageDefinition m, TokenParsing m) => [AnyUnit] -> m (DynQuantity ExactPi)
 expr us = buildExpressionParser table (term us)
       <?> "expression"
 
-term :: (Monad m, TokenParsing m) => [AnyUnit] -> m (DynQuantity ExactPi)
+term :: (MonadReader LanguageDefinition m, TokenParsing m) => [AnyUnit] -> m (DynQuantity ExactPi)
 term us = parens (expr us)
       <|> unaryFunctionApplication us
       <|> quantity us
@@ -122,22 +130,24 @@ exponentiation :: DynQuantity ExactPi -> DynQuantity ExactPi -> DynQuantity Exac
 exponentiation x y | Just y' <- y /~ demoteUnit' one, Just y'' <- toExactInteger y' = x P.^ y''
                    | otherwise = x ** y
 
-unaryFunctionApplication :: (TokenParsing m, Monad m) => [AnyUnit] -> m (DynQuantity ExactPi)
+unaryFunctionApplication :: (TokenParsing m, MonadReader LanguageDefinition m) => [AnyUnit] -> m (DynQuantity ExactPi)
 unaryFunctionApplication us = unaryFunction <*> parens q
   where
     q = expr us
 
-unaryFunction :: (TokenParsing m, Monad m) => m (DynQuantity ExactPi -> DynQuantity ExactPi)
-unaryFunction = choice $ fmap (\(n, f) -> f <$ reserved n) (Map.toList $ unaryFunctions defaultLanguageDefinition)
+unaryFunction :: (TokenParsing m, MonadReader LanguageDefinition m) => m (DynQuantity ExactPi -> DynQuantity ExactPi)
+unaryFunction = do
+                  ufs <- asks unaryFunctions
+                  choice $ fmap (\(n, f) -> f <$ reserved n) (Map.toList ufs)
 
-quantity :: (TokenParsing m, Monad m) => [AnyUnit] -> m (DynQuantity ExactPi)
+quantity :: (TokenParsing m, MonadReader LanguageDefinition m) => [AnyUnit] -> m (DynQuantity ExactPi)
 quantity us = wrap <$> numberWithPowers <*> option (Just $ demoteUnit' one) (unit us)
   where
     wrap :: ExactPi -> Maybe AnyUnit -> DynQuantity ExactPi
     wrap x (Just u) = x Dyn.*~ u
     wrap _ Nothing  = invalidQuantity
 
-numberWithPowers :: (TokenParsing m, Monad m) => m ExactPi
+numberWithPowers :: (TokenParsing m, MonadReader LanguageDefinition m) => m ExactPi
 numberWithPowers = token $ applyPowers <$> numberWithSuperscriptPower <*> many (symbolic '^' *> sign <*> decimal)
   where
     numberWithSuperscriptPower = power <$> number <*> optional superscriptInteger
@@ -209,7 +219,7 @@ sign = highlight Operator
    <|> id <$ char '+'
    <|> pure id
 
-number :: (TokenParsing m, Monad m) => m ExactPi
+number :: (TokenParsing m, MonadReader LanguageDefinition m) => m ExactPi
 number = pi <$ reserved "pi"
      <|> 2 P.* pi <$ reserved "tau"
      <|> convert <$> naturalOrScientific

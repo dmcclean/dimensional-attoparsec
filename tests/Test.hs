@@ -4,12 +4,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 import Test.Hspec
+import Control.Monad.Reader
 import Data.AEq
 import Data.Text as T
 import Data.Either (either, isLeft)
 import Data.Maybe (fromMaybe)
 import Data.Attoparsec.Text (parseOnly, endOfInput)
-import Numeric.Units.Dimensional.Parsing.Units (expr, whiteSpace)
+import Numeric.Units.Dimensional.Parsing.Units (expr, whiteSpace, defaultLanguageDefinition)
 import Numeric.Units.Dimensional.Parsing.UCUM (allUcumUnits)
 import Data.ExactPi
 import Numeric.Units.Dimensional.Prelude
@@ -34,7 +35,8 @@ spec = describe "Unit Parser" $ do
            mapM_ doesNotParse examplesThatShouldNotParse
 
 parse :: Text -> Either String (DynQuantity ExactPi)
-parse = parseOnly (whiteSpace *> expr allUcumUnits <* endOfInput)
+parse = let e = runReaderT (expr allUcumUnits) defaultLanguageDefinition
+         in parseOnly (whiteSpace *> e <* endOfInput)
 
 workingApprox :: Text -> AnyQuantity Double -> Spec
 workingApprox e v = it ("Correctly Parses " ++ show e ++ " with Approximate Value " ++ show v) $ do
