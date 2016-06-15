@@ -108,7 +108,7 @@ expr us = buildExpressionParser table (term us)
 term :: (MonadReader LanguageDefinition m, TokenParsing m) => [AnyUnit] -> m (DynQuantity ExactPi)
 term us = parens (expr us)
       <|> unaryFunctionApplication us
-      <|> quantity us
+      <|> quantity
       <|> constant
       <?> "simple expression"
 
@@ -141,8 +141,8 @@ unaryFunction = do
                   ufs <- asks unaryFunctions
                   choice $ fmap (\(n, f) -> f <$ reserved n) (Map.toList ufs)
 
-quantity :: (TokenParsing m, MonadReader LanguageDefinition m) => [AnyUnit] -> m (DynQuantity ExactPi)
-quantity us = wrap <$> numberWithPowers <*> option (Just $ demoteUnit' one) (unit us)
+quantity :: (TokenParsing m, MonadReader LanguageDefinition m) => m (DynQuantity ExactPi)
+quantity = wrap <$> numberWithPowers <*> option (Just $ demoteUnit' one) unit
   where
     wrap :: ExactPi -> Maybe AnyUnit -> DynQuantity ExactPi
     wrap x (Just u) = x Dyn.*~ u
@@ -159,42 +159,44 @@ numberWithPowers = token $ applyPowers <$> numberWithSuperscriptPower <*> many (
     power x (Just n) = x ^^ n
     power x _ = x
 
-unit :: (TokenParsing m, Monad m) => [AnyUnit] -> m (Maybe AnyUnit)
-unit us = prod <$> some oneUnit
+unit :: (TokenParsing m, MonadReader LanguageDefinition m) => m (Maybe AnyUnit)
+unit = prod <$> some oneUnit
   where
     prod :: [Maybe AnyUnit] -> Maybe AnyUnit
     prod = F.foldl' (liftA2 (Dyn.*)) (Just $ (demoteUnit' one))
-    oneUnit :: (TokenParsing m, Monad m) => m (Maybe AnyUnit)
+    oneUnit :: (TokenParsing m, MonadReader LanguageDefinition m) => m (Maybe AnyUnit)
     oneUnit = token $ applyPowers <$> unitWithSuperscriptPower <*> many (symbolic '^' *> sign <*> decimal)
     applyPowers :: Maybe AnyUnit -> [Integer] -> Maybe AnyUnit
     applyPowers u (n:ns) = power (applyPowers u ns) (Just n)
     applyPowers u _ = u
-    unitWithSuperscriptPower :: (TokenParsing m, Monad m) => m (Maybe AnyUnit)
-    unitWithSuperscriptPower = power <$> bareUnit us <*> optional superscriptInteger
+    unitWithSuperscriptPower :: (TokenParsing m, MonadReader LanguageDefinition m) => m (Maybe AnyUnit)
+    unitWithSuperscriptPower = power <$> bareUnit <*> optional superscriptInteger
     power :: Maybe AnyUnit -> Maybe Integer -> Maybe AnyUnit
     power (Just u) (Just n) = Just $ u Dyn.^ n
     power u _ = u
 
-bareUnit :: (CharParsing m, Monad m) => [AnyUnit] -> m (Maybe AnyUnit)
-bareUnit us = try (Just <$> fullAtomicUnit us)
-          <|> try (Just <$> abbreviatedAtomicUnit us)
-          <|> try (prefixedFullUnit us)
-          <|> try (prefixedAtomicUnit us)
+bareUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m (Maybe AnyUnit)
+bareUnit = try (Just <$> fullAtomicUnit)
+       <|> try (Just <$> abbreviatedAtomicUnit)
+       <|> try prefixedFullUnit
+       <|> try prefixedAtomicUnit
 
-prefixedFullUnit :: (CharParsing m, Monad m) => [AnyUnit] -> m (Maybe AnyUnit)
-prefixedFullUnit us = Dyn.applyPrefix <$> fullPrefix <*> fullAtomicUnit us
+prefixedFullUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m (Maybe AnyUnit)
+prefixedFullUnit = Dyn.applyPrefix <$> fullPrefix <*> fullAtomicUnit
 
-prefixedAtomicUnit :: (CharParsing m, Monad m) => [AnyUnit] -> m (Maybe AnyUnit)
-prefixedAtomicUnit us = Dyn.applyPrefix <$> abbreviatedPrefix <*> abbreviatedAtomicUnit us
+prefixedAtomicUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m (Maybe AnyUnit)
+prefixedAtomicUnit = Dyn.applyPrefix <$> abbreviatedPrefix <*> abbreviatedAtomicUnit
 
-abbreviatedAtomicUnit :: (CharParsing m) => [AnyUnit] -> m AnyUnit
+abbreviatedAtomicUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m AnyUnit
 abbreviatedAtomicUnit = atomicUnit abbreviation_en
 
-fullAtomicUnit :: (CharParsing m) => [AnyUnit] -> m AnyUnit
+fullAtomicUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m AnyUnit
 fullAtomicUnit = atomicUnit name_en
 
-atomicUnit :: (CharParsing m) => (forall a.NameAtom a -> String) -> [AnyUnit] -> m AnyUnit
-atomicUnit f us = choice $ mapMaybe parseUnit us
+atomicUnit :: (CharParsing m, MonadReader LanguageDefinition m) => (forall a.NameAtom a -> String) -> m AnyUnit
+atomicUnit f = do
+                 us <- asks units
+                 choice $ mapMaybe parseUnit us
   where
     parseUnit :: (CharParsing m) => AnyUnit -> Maybe (m AnyUnit)
     parseUnit u = do
