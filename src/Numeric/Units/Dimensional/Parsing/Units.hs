@@ -101,16 +101,16 @@ reservedOp = reserve emptyOps
 {-
 Expressions for Quantities
 -}
-expr :: (MonadReader LanguageDefinition m, TokenParsing m) => [AnyUnit] -> m (DynQuantity ExactPi)
-expr us = buildExpressionParser table (term us)
-      <?> "expression"
+expr :: (MonadReader LanguageDefinition m, TokenParsing m) => m (DynQuantity ExactPi)
+expr = buildExpressionParser table term
+   <?> "expression"
 
-term :: (MonadReader LanguageDefinition m, TokenParsing m) => [AnyUnit] -> m (DynQuantity ExactPi)
-term us = parens (expr us)
-      <|> unaryFunctionApplication us
-      <|> quantity
-      <|> constant
-      <?> "simple expression"
+term :: (MonadReader LanguageDefinition m, TokenParsing m) => m (DynQuantity ExactPi)
+term = parens expr
+   <|> unaryFunctionApplication
+   <|> quantity
+   <|> constant
+   <?> "simple expression"
 
 table :: (Monad m, TokenParsing m) => [[Operator m (DynQuantity ExactPi)]]
 table = [ [preop "-" negate, preop "+" id ]
@@ -131,10 +131,8 @@ exponentiation :: DynQuantity ExactPi -> DynQuantity ExactPi -> DynQuantity Exac
 exponentiation x y | Just y' <- y /~ demoteUnit' one, Just y'' <- toExactInteger y' = x P.^ y''
                    | otherwise = x ** y
 
-unaryFunctionApplication :: (TokenParsing m, MonadReader LanguageDefinition m) => [AnyUnit] -> m (DynQuantity ExactPi)
-unaryFunctionApplication us = unaryFunction <*> parens q
-  where
-    q = expr us
+unaryFunctionApplication :: (TokenParsing m, MonadReader LanguageDefinition m) => m (DynQuantity ExactPi)
+unaryFunctionApplication = unaryFunction <*> parens expr
 
 unaryFunction :: (TokenParsing m, MonadReader LanguageDefinition m) => m (DynQuantity ExactPi -> DynQuantity ExactPi)
 unaryFunction = do

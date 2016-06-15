@@ -37,10 +37,12 @@ spec = describe "Unit Parser" $ do
            mapM_ doesNotParse examplesThatShouldNotParse
 
 lang :: LanguageDefinition
-lang = defaultLanguageDefinition { constants = Map.insert "c" (demoteQuantity speedOfLightInVacuum) $ constants defaultLanguageDefinition }
+lang = defaultLanguageDefinition { constants = Map.insert "c" (demoteQuantity speedOfLightInVacuum) $ constants defaultLanguageDefinition
+                                 , units = allUcumUnits
+                                 }
 
 parse :: Text -> Either String (DynQuantity ExactPi)
-parse = let e = runReaderT (expr allUcumUnits) lang
+parse = let e = runReaderT expr lang
          in parseOnly (whiteSpace *> e <* endOfInput)
 
 workingApprox :: Text -> AnyQuantity Double -> Spec
