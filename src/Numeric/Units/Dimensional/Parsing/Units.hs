@@ -94,8 +94,8 @@ reserved name = do
                   s <- idStyle
                   reserveText s name
 
-reservedOp :: (TokenParsing m, Monad m) => String -> m ()
-reservedOp = reserve emptyOps
+reservedOp :: (TokenParsing m, Monad m) => Text -> m ()
+reservedOp = reserveText emptyOps
 
 {-
 Expressions for Quantities
@@ -118,10 +118,10 @@ table = [ [preop "-" negate, preop "+" id ]
         , [binop "+" (+) AssocLeft, binop "-" (-)   AssocLeft ]
         ]
 
-binop :: (Monad m, TokenParsing m) => String -> (a -> a -> a) -> Assoc -> Operator m a
+binop :: (Monad m, TokenParsing m) => Text -> (a -> a -> a) -> Assoc -> Operator m a
 binop name fun assoc = Infix (fun <$ reservedOp name) assoc
 
-preop :: (Monad m, TokenParsing m) => String -> (a -> a) -> Operator m a
+preop :: (Monad m, TokenParsing m) => Text -> (a -> a) -> Operator m a
 preop name fun = Prefix (fun <$ reservedOp name)
 
 -- When we raise a dynamic quantity to an exact dimensionless integer power, we can use the more dimensionally-lenient ^ operator.
