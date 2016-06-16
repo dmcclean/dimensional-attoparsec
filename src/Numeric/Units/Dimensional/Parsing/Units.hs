@@ -29,7 +29,6 @@ data LanguageDefinition = LanguageDefinition
                         { units :: [AnyUnit]
                         , constants :: Map.Map String (AnyQuantity ExactPi)
                         , unaryFunctions :: Map.Map String (DynQuantity ExactPi -> DynQuantity ExactPi)
-                        , allowPrefixPositiveSign :: Bool
                         , allowSuperscriptExponentiation :: Bool
                         , identifierStart :: forall m.(CharParsing m) => m Char
                         , identifierLetter :: forall m.(CharParsing m) => m Char
@@ -61,7 +60,6 @@ defaultLanguageDefinition = LanguageDefinition
                                                           , ("acosh", acosh)
                                                           , ("atanh", atanh)
                                                           ]
-                          , allowPrefixPositiveSign = True
                           , allowSuperscriptExponentiation = True
                           , identifierStart = letter
                           , identifierLetter = alphaNum <|> char '_'
@@ -149,7 +147,11 @@ quantity = wrap <$> numberWithPowers <*> option (Just $ demoteUnit' one) unit
 numberWithPowers :: (TokenParsing m, MonadReader LanguageDefinition m) => m ExactPi
 numberWithPowers = token $ applyPowers <$> numberWithSuperscriptPower <*> many (symbolic '^' *> sign <*> decimal)
   where
-    numberWithSuperscriptPower = power <$> number <*> optional superscriptInteger
+    numberWithSuperscriptPower = do
+                                   useSuperscript <- asks allowSuperscriptExponentiation
+                                   if useSuperscript
+                                     then power <$> number <*> optional superscriptInteger
+                                     else number
     applyPowers :: ExactPi -> [Integer] -> ExactPi
     applyPowers x (n:ns) = (applyPowers x ns) ^^ n
     applyPowers x _ = x
