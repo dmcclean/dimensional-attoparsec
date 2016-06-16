@@ -42,8 +42,6 @@ data LanguageDefinition = LanguageDefinition
                         , constants :: Map.Map Text (AnyQuantity ExactPi)
                         , unaryFunctions :: Map.Map Text (DynQuantity ExactPi -> DynQuantity ExactPi)
                         , allowSuperscriptExponentiation :: Bool
-                        , identifierStart :: forall m.(CharParsing m) => m Char
-                        , identifierLetter :: forall m.(CharParsing m) => m Char
                         }
 
 defaultLanguageDefinition :: LanguageDefinition
@@ -73,39 +71,11 @@ defaultLanguageDefinition = LanguageDefinition
                                                           , ("atanh", atanh)
                                                           ]
                           , allowSuperscriptExponentiation = True
-                          , identifierStart = letter
-                          , identifierLetter = alphaNum <|> char '_'
                           }
 
-{-
-Lexical Rules
--}
-idStyle :: (TokenParsing m, MonadReader LanguageDefinition m) => m (IdentifierStyle m)
-idStyle = do
-            ufs <- asks unaryFunctions
-            s <- asks identifierStart
-            l <- asks identifierLetter
-            return $ IdentifierStyle
-                       { _styleName = "identifier"
-                       , _styleReserved = fromList . fmap T.unpack $ (Map.keys ufs) ++ ["pi", "tau"]
-                       , _styleStart = s
-                       , _styleLetter = l
-                       , _styleHighlight = Identifier
-                       , _styleReservedHighlight = ReservedIdentifier
-                       }
-
-reserved :: (TokenParsing m, MonadReader LanguageDefinition m) => Text -> m ()
-reserved name = do
-                  s <- idStyle
-                  reserveText s name
-
-reservedOp :: (TokenParsing m, Monad m) => Text -> m ()
-reservedOp = reserveText emptyOps
-
-{-
-Expressions for Quantities
--}
-expression :: (MonadReader LanguageDefinition m, TokenParsing m) => m (DynQuantity ExactPi)
+-- | An expression may be made by combining 'quantity's with the arithmetic operators ^, *, /, +, -,
+-- prefix negation, and any 'unaryFunctions' available in the supplied 'LanguageDefinition'.
+expression :: (TokenParsing m, MonadReader LanguageDefinition m) => m (DynQuantity ExactPi)
 expression = buildExpressionParser table term
          <?> "expression"
 
@@ -113,11 +83,10 @@ term :: (MonadReader LanguageDefinition m, TokenParsing m) => m (DynQuantity Exa
 term = parens expression
    <|> unaryFunctionApplication
    <|> quantity
-   <|> constant
    <?> "simple expression"
 
 table :: (Monad m, TokenParsing m) => [[Operator m (DynQuantity ExactPi)]]
-table = [ [preop "-" negate, preop "+" id ]
+table = [ [preop "-" negate ]
         , [binop "^" exponentiation AssocRight]
         , [binop "*" (P.*) AssocLeft, binop "/" (P./) AssocLeft ]
         , [binop "+" (+) AssocLeft, binop "-" (-)   AssocLeft ]
@@ -143,8 +112,11 @@ unaryFunction = do
                   ufs <- asks unaryFunctions
                   choice $ fmap (\(n, f) -> f <$ reserved n) (Map.toList ufs)
 
+-- | A quantity may be a 'number' with an optional 'unit' (the unit 'one' is otherwise implied), or it may be one
+-- of the 'constants' available in the supplied 'LanguageDefinition'.
 quantity :: (TokenParsing m, MonadReader LanguageDefinition m) => m (DynQuantity ExactPi)
-quantity = (Dyn.*~) <$> numberWithPowers <*> option (demoteUnit' one) unit
+quantity = constant
+       <|> (Dyn.*~) <$> numberWithPowers <*> option (demoteUnit' one) unit
 
 numberWithPowers :: (TokenParsing m, MonadReader LanguageDefinition m) => m ExactPi
 numberWithPowers = token $ applyPowers <$> numberWithSuperscriptPower <*> many (symbolic '^' *> sign <*> decimal)
@@ -257,6 +229,32 @@ constant = do
     makeConstant :: (TokenParsing m, MonadReader LanguageDefinition m) => Text -> AnyQuantity ExactPi -> m (DynQuantity ExactPi)
     makeConstant n v = (demoteQuantity v) <$ reserved n
 
+{-
+Lexical Rules for Identifiers
+-}
+idStyle :: (TokenParsing m, MonadReader LanguageDefinition m) => m (IdentifierStyle m)
+idStyle = do
+            ufs <- asks unaryFunctions
+            return $ IdentifierStyle
+                       { _styleName = "identifier"
+                       , _styleReserved = fromList . fmap T.unpack $ (Map.keys ufs) ++ ["pi", "tau"]
+                       , _styleStart = letter
+                       , _styleLetter = alphaNum <|> char '_'
+                       , _styleHighlight = Identifier
+                       , _styleReservedHighlight = ReservedIdentifier
+                       }
+
+reserved :: (TokenParsing m, MonadReader LanguageDefinition m) => Text -> m ()
+reserved name = do
+                  s <- idStyle
+                  reserveText s name
+
+reservedOp :: (TokenParsing m, Monad m) => Text -> m ()
+reservedOp = reserveText emptyOps
+
+{-
+Parsing Superscript Numbers
+-}
 superscriptInteger :: (CharParsing m, Integral a) => m a
 superscriptInteger = superscriptSign <*> superscriptDecimal
 
