@@ -100,12 +100,12 @@ reservedOp = reserveText emptyOps
 {-
 Expressions for Quantities
 -}
-expr :: (MonadReader LanguageDefinition m, TokenParsing m) => m (DynQuantity ExactPi)
-expr = buildExpressionParser table term
-   <?> "expression"
+expression :: (MonadReader LanguageDefinition m, TokenParsing m) => m (DynQuantity ExactPi)
+expression = buildExpressionParser table term
+         <?> "expression"
 
 term :: (MonadReader LanguageDefinition m, TokenParsing m) => m (DynQuantity ExactPi)
-term = parens expr
+term = parens expression
    <|> unaryFunctionApplication
    <|> quantity
    <|> constant
@@ -131,7 +131,7 @@ exponentiation x y | Just y' <- y /~ demoteUnit' one, Just y'' <- toExactInteger
                    | otherwise = x ** y
 
 unaryFunctionApplication :: (TokenParsing m, MonadReader LanguageDefinition m) => m (DynQuantity ExactPi)
-unaryFunctionApplication = unaryFunction <*> parens expr
+unaryFunctionApplication = unaryFunction <*> parens expression
 
 unaryFunction :: (TokenParsing m, MonadReader LanguageDefinition m) => m (DynQuantity ExactPi -> DynQuantity ExactPi)
 unaryFunction = do
