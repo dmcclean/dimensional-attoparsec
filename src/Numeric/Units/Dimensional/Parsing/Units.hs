@@ -2,7 +2,18 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 
-module Numeric.Units.Dimensional.Parsing.Units where
+module Numeric.Units.Dimensional.Parsing.Units
+(
+  -- * Parsers
+  expression
+, quantity
+, unit
+, number
+  -- * Customizing the Accepted Language
+, LanguageDefinition(..)
+, defaultLanguageDefinition
+)
+where
 
 import Control.Applicative
 import Control.Monad.Reader
@@ -82,12 +93,6 @@ idStyle = do
                        , _styleHighlight = Identifier
                        , _styleReservedHighlight = ReservedIdentifier
                        }
-
-whiteSpace :: TokenParsing m => m ()
-whiteSpace = Text.Parser.Token.whiteSpace
-
-identifier :: (TokenParsing m, MonadReader LanguageDefinition m) => m Text
-identifier = idStyle >>= ident
 
 reserved :: (TokenParsing m, MonadReader LanguageDefinition m) => Text -> m ()
 reserved name = do

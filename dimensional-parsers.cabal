@@ -57,6 +57,7 @@ test-suite tests
                        hspec,
                        text,
                        attoparsec,
+                       parsers,
                        ieee754,
                        mtl,
                        base

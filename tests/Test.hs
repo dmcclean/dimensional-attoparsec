@@ -11,7 +11,8 @@ import Data.Either (either, isLeft)
 import Data.Maybe (fromMaybe)
 import qualified Data.Map as Map
 import Data.Attoparsec.Text (parseOnly, endOfInput)
-import Numeric.Units.Dimensional.Parsing.Units (expr, whiteSpace, defaultLanguageDefinition, LanguageDefinition(..))
+import Text.Parser.Token (whiteSpace)
+import Numeric.Units.Dimensional.Parsing.Units
 import Numeric.Units.Dimensional.Parsing.UCUM (allUcumUnits)
 import Data.ExactPi
 import Numeric.Units.Dimensional.Prelude
@@ -42,7 +43,7 @@ lang = defaultLanguageDefinition { constants = Map.insert "c" (demoteQuantity sp
                                  }
 
 parse :: Text -> Either String (DynQuantity ExactPi)
-parse = let e = runReaderT expr lang
+parse = let e = runReaderT expression lang
          in parseOnly (whiteSpace *> e <* endOfInput)
 
 workingApprox :: Text -> AnyQuantity Double -> Spec
