@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 
 module Numeric.Units.Dimensional.Parsing.Units where
@@ -27,8 +28,8 @@ import qualified Prelude as P
 
 data LanguageDefinition = LanguageDefinition 
                         { units :: [AnyUnit]
-                        , constants :: Map.Map String (AnyQuantity ExactPi)
-                        , unaryFunctions :: Map.Map String (DynQuantity ExactPi -> DynQuantity ExactPi)
+                        , constants :: Map.Map Text (AnyQuantity ExactPi)
+                        , unaryFunctions :: Map.Map Text (DynQuantity ExactPi -> DynQuantity ExactPi)
                         , allowSuperscriptExponentiation :: Bool
                         , identifierStart :: forall m.(CharParsing m) => m Char
                         , identifierLetter :: forall m.(CharParsing m) => m Char
@@ -75,7 +76,7 @@ idStyle = do
             l <- asks identifierLetter
             return $ IdentifierStyle
                        { _styleName = "identifier"
-                       , _styleReserved = fromList $ (Map.keys ufs) ++ ["pi", "tau"]
+                       , _styleReserved = fromList . fmap T.unpack $ (Map.keys ufs) ++ ["pi", "tau"]
                        , _styleStart = s
                        , _styleLetter = l
                        , _styleHighlight = Identifier
@@ -88,10 +89,10 @@ whiteSpace = Text.Parser.Token.whiteSpace
 identifier :: (TokenParsing m, MonadReader LanguageDefinition m) => m Text
 identifier = idStyle >>= ident
 
-reserved :: (TokenParsing m, MonadReader LanguageDefinition m) => String -> m ()
+reserved :: (TokenParsing m, MonadReader LanguageDefinition m) => Text -> m ()
 reserved name = do
                   s <- idStyle
-                  reserve s name
+                  reserveText s name
 
 reservedOp :: (TokenParsing m, Monad m) => String -> m ()
 reservedOp = reserve emptyOps
@@ -235,7 +236,7 @@ dimensionlessConstant = do
                           let ps = fmap (uncurry makeConstant) . Map.toList $ Map.mapMaybe (Dyn./~ (demoteUnit' one)) cs
                           choice ps
   where
-    makeConstant :: (TokenParsing m, MonadReader LanguageDefinition m) => String -> ExactPi -> m ExactPi
+    makeConstant :: (TokenParsing m, MonadReader LanguageDefinition m) => Text -> ExactPi -> m ExactPi
     makeConstant n v = v <$ reserved n
 
 constant :: (TokenParsing m, MonadReader LanguageDefinition m) => m (DynQuantity ExactPi)
@@ -244,7 +245,7 @@ constant = do
              let ps = fmap (uncurry makeConstant) $ Map.toList cs
              choice ps
   where
-    makeConstant :: (TokenParsing m, MonadReader LanguageDefinition m) => String -> AnyQuantity ExactPi -> m (DynQuantity ExactPi)
+    makeConstant :: (TokenParsing m, MonadReader LanguageDefinition m) => Text -> AnyQuantity ExactPi -> m (DynQuantity ExactPi)
     makeConstant n v = (demoteQuantity v) <$ reserved n
 
 superscriptInteger :: (CharParsing m, Integral a) => m a
