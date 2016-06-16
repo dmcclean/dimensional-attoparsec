@@ -144,11 +144,7 @@ unaryFunction = do
                   choice $ fmap (\(n, f) -> f <$ reserved n) (Map.toList ufs)
 
 quantity :: (TokenParsing m, MonadReader LanguageDefinition m) => m (DynQuantity ExactPi)
-quantity = wrap <$> numberWithPowers <*> option (Just $ demoteUnit' one) unit
-  where
-    wrap :: ExactPi -> Maybe AnyUnit -> DynQuantity ExactPi
-    wrap x (Just u) = x Dyn.*~ u
-    wrap _ Nothing  = invalidQuantity
+quantity = (Dyn.*~) <$> numberWithPowers <*> option (demoteUnit' one) unit
 
 numberWithPowers :: (TokenParsing m, MonadReader LanguageDefinition m) => m ExactPi
 numberWithPowers = token $ applyPowers <$> numberWithSuperscriptPower <*> many (symbolic '^' *> sign <*> decimal)
@@ -165,33 +161,41 @@ numberWithPowers = token $ applyPowers <$> numberWithSuperscriptPower <*> many (
     power x (Just n) = x ^^ n
     power x _ = x
 
-unit :: (TokenParsing m, MonadReader LanguageDefinition m) => m (Maybe AnyUnit)
+unit :: (TokenParsing m, MonadReader LanguageDefinition m) => m AnyUnit
 unit = prod <$> some oneUnit
   where
-    prod :: [Maybe AnyUnit] -> Maybe AnyUnit
-    prod = F.foldl' (liftA2 (Dyn.*)) (Just $ (demoteUnit' one))
-    oneUnit :: (TokenParsing m, MonadReader LanguageDefinition m) => m (Maybe AnyUnit)
+    prod :: [AnyUnit] -> AnyUnit
+    prod = F.foldl' (Dyn.*) (demoteUnit' one)
+    oneUnit :: (TokenParsing m, MonadReader LanguageDefinition m) => m AnyUnit
     oneUnit = token $ applyPowers <$> unitWithSuperscriptPower <*> many (symbolic '^' *> sign <*> decimal)
-    applyPowers :: Maybe AnyUnit -> [Integer] -> Maybe AnyUnit
+    applyPowers :: AnyUnit -> [Integer] -> AnyUnit
     applyPowers u (n:ns) = power (applyPowers u ns) (Just n)
     applyPowers u _ = u
-    unitWithSuperscriptPower :: (TokenParsing m, MonadReader LanguageDefinition m) => m (Maybe AnyUnit)
+    unitWithSuperscriptPower :: (TokenParsing m, MonadReader LanguageDefinition m) => m AnyUnit
     unitWithSuperscriptPower = power <$> bareUnit <*> optional superscriptInteger
-    power :: Maybe AnyUnit -> Maybe Integer -> Maybe AnyUnit
-    power (Just u) (Just n) = Just $ u Dyn.^ n
+    power :: AnyUnit -> Maybe Integer -> AnyUnit
+    power u (Just n) = u Dyn.^ n
     power u _ = u
 
-bareUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m (Maybe AnyUnit)
-bareUnit = try (Just <$> fullAtomicUnit)
-       <|> try (Just <$> abbreviatedAtomicUnit)
+bareUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m AnyUnit
+bareUnit = try fullAtomicUnit
+       <|> try abbreviatedAtomicUnit
        <|> try prefixedFullUnit
        <|> try prefixedAtomicUnit
 
-prefixedFullUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m (Maybe AnyUnit)
-prefixedFullUnit = Dyn.applyPrefix <$> fullPrefix <*> fullAtomicUnit
+tryApplyPrefix :: (Parsing m, Monad m) => m Prefix -> m AnyUnit -> m AnyUnit
+tryApplyPrefix p u = do
+                       p' <- p
+                       u' <- u
+                       case (Dyn.applyPrefix p' u') of
+                         Nothing -> unexpected "Metric prefix applied to non-metric unit."
+                         Just pu -> return pu
 
-prefixedAtomicUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m (Maybe AnyUnit)
-prefixedAtomicUnit = Dyn.applyPrefix <$> abbreviatedPrefix <*> abbreviatedAtomicUnit
+prefixedFullUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m AnyUnit
+prefixedFullUnit = tryApplyPrefix fullPrefix fullAtomicUnit
+
+prefixedAtomicUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m AnyUnit
+prefixedAtomicUnit = tryApplyPrefix abbreviatedPrefix abbreviatedAtomicUnit
 
 abbreviatedAtomicUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m AnyUnit
 abbreviatedAtomicUnit = atomicUnit abbreviation_en

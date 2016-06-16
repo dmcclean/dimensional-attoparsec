@@ -121,7 +121,6 @@ examplesWithNoValue =
   , "1 ft + 3 A"
   , "1m - 1 kg"
   , "sqrt(15 s)"
-  , "3 kft" -- because ft is not a metric unit
   ]
 
 examplesThatShouldNotParse :: [Text]
@@ -130,4 +129,5 @@ examplesThatShouldNotParse =
   , "3 kgms^2"
   , "kg 3"
   , "foo(2 m)"
+  , "3 kft" -- because ft is not a metric unit
   ]
