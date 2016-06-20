@@ -37,11 +37,12 @@ import Text.Parser.Token.Style (emptyOps)
 import Text.Parser.Token.Highlight
 import qualified Prelude as P
 
+-- | A group of parameters defining a langauge of unit and quantity expressions.
 data LanguageDefinition = LanguageDefinition 
-                        { units :: [AnyUnit]
-                        , constants :: Map.Map Text (AnyQuantity ExactPi)
-                        , unaryFunctions :: Map.Map Text (DynQuantity ExactPi -> DynQuantity ExactPi)
-                        , allowSuperscriptExponentiation :: Bool
+                        { units :: [AnyUnit] -- ^ A list of units which may appear in 'quantity' or 'unit' expressions in the language.
+                        , constants :: Map.Map Text (AnyQuantity ExactPi) -- ^ A list of constants which may appear in 'quantity' expressions in the language.
+                        , unaryFunctions :: Map.Map Text (DynQuantity ExactPi -> DynQuantity ExactPi) -- ^ A list of unary functions which may be applied in 'expression's in the language.
+                        , allowSuperscriptExponentiation :: Bool -- ^ 'True' if Unicode superscript exponents are to be permitted in the language.
                         }
 
 defaultLanguageDefinition :: LanguageDefinition
