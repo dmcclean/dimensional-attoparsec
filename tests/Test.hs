@@ -4,17 +4,21 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 import Test.Hspec
+import Control.Monad.Reader
 import Data.AEq
 import Data.Text as T
 import Data.Either (either, isLeft)
 import Data.Maybe (fromMaybe)
+import qualified Data.Map as Map
 import Data.Attoparsec.Text (parseOnly, endOfInput)
-import Numeric.Units.Dimensional.Parsing.Units (expr, whiteSpace)
+import Text.Parser.Token (whiteSpace)
+import Numeric.Units.Dimensional.Parsing.Units
 import Numeric.Units.Dimensional.Parsing.UCUM (allUcumUnits)
 import Data.ExactPi
 import Numeric.Units.Dimensional.Prelude
 import Numeric.Units.Dimensional.Dynamic (DynQuantity, AnyQuantity, demoteQuantity)
 import Numeric.Units.Dimensional.NonSI
+import Numeric.Units.Dimensional.Codata
 import qualified Numeric.Units.Dimensional.Dynamic as Dyn
 import qualified Prelude as P
 
@@ -33,8 +37,14 @@ spec = describe "Unit Parser" $ do
          describe "Incorrect Parses" $ do
            mapM_ doesNotParse examplesThatShouldNotParse
 
+lang :: LanguageDefinition
+lang = defaultLanguageDefinition { constants = Map.insert "c" (demoteQuantity speedOfLightInVacuum) $ constants defaultLanguageDefinition
+                                 , units = allUcumUnits
+                                 }
+
 parse :: Text -> Either String (DynQuantity ExactPi)
-parse = parseOnly (whiteSpace *> expr allUcumUnits <* endOfInput)
+parse = let e = runReaderT expression lang
+         in parseOnly (whiteSpace *> e <* endOfInput)
 
 workingApprox :: Text -> AnyQuantity Double -> Spec
 workingApprox e v = it ("Correctly Parses " ++ show e ++ " with Approximate Value " ++ show v) $ do
@@ -90,6 +100,7 @@ workingExamples =
   , ("-3 W",                  dq$ -3 *~ watt)
   , ("6.022e23",              dq$ 6.022e23 *~ one)
   , ("2^-15 radian",          dq$ ((2 P.^^ -15) *~ radian))
+  , ("0.3 * c",               dq$ (0.3 *~ one) * speedOfLightInVacuum)
   ]
 
 workingApproximateExamples :: [(Text, AnyQuantity Double)]
@@ -111,7 +122,6 @@ examplesWithNoValue =
   , "1 ft + 3 A"
   , "1m - 1 kg"
   , "sqrt(15 s)"
-  , "3 kft" -- because ft is not a metric unit
   ]
 
 examplesThatShouldNotParse :: [Text]
@@ -120,4 +130,5 @@ examplesThatShouldNotParse =
   , "3 kgms^2"
   , "kg 3"
   , "foo(2 m)"
+  , "3 kft" -- because ft is not a metric unit
   ]

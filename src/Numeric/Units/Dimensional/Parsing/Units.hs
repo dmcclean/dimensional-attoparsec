@@ -1,15 +1,30 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 
-module Numeric.Units.Dimensional.Parsing.Units where
+module Numeric.Units.Dimensional.Parsing.Units
+(
+  -- * Parsers
+  expression
+, quantity
+, unit
+, number
+  -- * Customizing the Accepted Language
+, LanguageDefinition(..)
+, defaultLanguageDefinition
+)
+where
 
 import Control.Applicative
+import Control.Monad.Reader
 import Data.ExactPi as E
 import qualified Data.Foldable as F
 import Data.HashSet (fromList)
 import Data.Maybe (mapMaybe)
 import Data.Text as T
-import Numeric.Units.Dimensional (one)
-import Numeric.Units.Dimensional.Dynamic hiding ((*), (/), recip)
+import qualified Data.Map as Map
+import Numeric.Units.Dimensional (one, (*~))
+import Numeric.Units.Dimensional.Dynamic hiding ((*~), (*), (/), recip)
 import qualified Numeric.Units.Dimensional.Dynamic as Dyn
 import Numeric.Units.Dimensional.SIUnits
 import Numeric.Units.Dimensional.UnitNames
@@ -22,57 +37,67 @@ import Text.Parser.Token.Style (emptyOps)
 import Text.Parser.Token.Highlight
 import qualified Prelude as P
 
-{-
-Lexical Rules
--}
-idStyle :: TokenParsing m => IdentifierStyle m
-idStyle = IdentifierStyle
-          { _styleName = "identifier"
-          , _styleReserved =  fromList $ (fmap fst unaryFunctions) ++ ["pi", "tau"]
-          , _styleStart = letter
-          , _styleLetter = alphaNum <|> char '_'
-          , _styleHighlight = Identifier
-          , _styleReservedHighlight = ReservedIdentifier
-          }
+-- | A group of parameters defining a langauge of unit and quantity expressions.
+data LanguageDefinition = LanguageDefinition 
+                        { units :: [AnyUnit] -- ^ A list of units which may appear in 'quantity' or 'unit' expressions in the language.
+                        , constants :: Map.Map Text (AnyQuantity ExactPi) -- ^ A list of constants which may appear in 'quantity' expressions in the language.
+                        , unaryFunctions :: Map.Map Text (DynQuantity ExactPi -> DynQuantity ExactPi) -- ^ A list of unary functions which may be applied in 'expression's in the language.
+                        , allowSuperscriptExponentiation :: Bool -- ^ 'True' if Unicode superscript exponents are to be permitted in the language.
+                        }
 
-whiteSpace :: TokenParsing m => m ()
-whiteSpace = Text.Parser.Token.whiteSpace
+defaultLanguageDefinition :: LanguageDefinition
+defaultLanguageDefinition = LanguageDefinition
+                          { units = []
+                          , constants = Map.fromList [ ("pi",  demoteQuantity $ pi *~ one)
+                                                     , ("tau", demoteQuantity $ (2 P.* pi) *~ one)
+                                                     ]
+                          , unaryFunctions = Map.fromList [ ("abs", abs)
+                                                          , ("signum", signum)
+                                                          , ("sgn", signum)
+                                                          , ("exp", exp)
+                                                          , ("log", log)
+                                                          , ("ln", log)
+                                                          , ("sqrt", sqrt)
+                                                          , ("sin", sin)
+                                                          , ("cos", cos)
+                                                          , ("tan", tan)
+                                                          , ("asin", asin)
+                                                          , ("acos", acos)
+                                                          , ("atan", atan)
+                                                          , ("sinh", sinh)
+                                                          , ("cosh", cosh)
+                                                          , ("tanh", tanh)
+                                                          , ("asinh", asinh)
+                                                          , ("acosh", acosh)
+                                                          , ("atanh", atanh)
+                                                          ]
+                          , allowSuperscriptExponentiation = True
+                          }
 
-identifier :: (TokenParsing m, Monad m) => m Text
-identifier = ident idStyle
+-- | An expression may be made by combining 'quantity's with the arithmetic operators ^, *, /, +, -,
+-- prefix negation, and any 'unaryFunctions' available in the supplied 'LanguageDefinition'.
+expression :: (TokenParsing m, MonadReader LanguageDefinition m) => m (DynQuantity ExactPi)
+expression = buildExpressionParser table term
+         <?> "expression"
 
-reserved :: (TokenParsing m, Monad m) => String -> m ()
-reserved = reserve idStyle
-
-reservedOp :: (TokenParsing m, Monad m) => String -> m ()
-reservedOp = reserve emptyOps
-
-{-
-Expressions for Quantities
--}
-expr :: (Monad m, TokenParsing m) => [AnyUnit] -> m (DynQuantity ExactPi)
-expr us = buildExpressionParser table (term us)
-      <?> "expression"
-
-term :: (Monad m, TokenParsing m) => [AnyUnit] -> m (DynQuantity ExactPi)
-term us = parens (expr us)
-      <|> unaryFunctionApplication us
-      <|> quantity us
-      <?> "simple expression"
+term :: (MonadReader LanguageDefinition m, TokenParsing m) => m (DynQuantity ExactPi)
+term = parens expression
+   <|> unaryFunctionApplication
+   <|> quantity
+   <?> "simple expression"
 
 table :: (Monad m, TokenParsing m) => [[Operator m (DynQuantity ExactPi)]]
-table = [ [preop "-" negate, preop "+" id ]
+table = [ [preop "-" negate ]
         , [binop "^" exponentiation AssocRight]
         , [binop "*" (P.*) AssocLeft, binop "/" (P./) AssocLeft ]
         , [binop "+" (+) AssocLeft, binop "-" (-)   AssocLeft ]
         ]
 
-binop :: (Monad m, TokenParsing m) => String -> (a -> a -> a) -> Assoc -> Operator m a
-binop  name fun assoc = Infix (fun <$ reservedOp name) assoc
+binop :: (Monad m, TokenParsing m) => Text -> (a -> a -> a) -> Assoc -> Operator m a
+binop name fun assoc = Infix (fun <$ reservedOp name) assoc
 
-preop, postop :: (Monad m, TokenParsing m) => String -> (a -> a) -> Operator m a
-preop  name fun       = Prefix (fun <$ reservedOp name)
-postop name fun       = Postfix (fun <$ reservedOp name)
+preop :: (Monad m, TokenParsing m) => Text -> (a -> a) -> Operator m a
+preop name fun = Prefix (fun <$ reservedOp name)
 
 -- When we raise a dynamic quantity to an exact dimensionless integer power, we can use the more dimensionally-lenient ^ operator.
 -- When the exponent does not meet these conditions we fall back to the ** operator.
@@ -80,47 +105,28 @@ exponentiation :: DynQuantity ExactPi -> DynQuantity ExactPi -> DynQuantity Exac
 exponentiation x y | Just y' <- y /~ demoteUnit' one, Just y'' <- toExactInteger y' = x P.^ y''
                    | otherwise = x ** y
 
-unaryFunctionApplication :: (TokenParsing m, Monad m) => [AnyUnit] -> m (DynQuantity ExactPi)
-unaryFunctionApplication us = unaryFunction <*> parens q
-  where
-    q = expr us
+unaryFunctionApplication :: (TokenParsing m, MonadReader LanguageDefinition m) => m (DynQuantity ExactPi)
+unaryFunctionApplication = unaryFunction <*> parens expression
 
-unaryFunction :: (TokenParsing m, Monad m) => m (DynQuantity ExactPi -> DynQuantity ExactPi)
-unaryFunction = choice $ fmap (\(n, f) -> f <$ reserved n) unaryFunctions
+unaryFunction :: (TokenParsing m, MonadReader LanguageDefinition m) => m (DynQuantity ExactPi -> DynQuantity ExactPi)
+unaryFunction = do
+                  ufs <- asks unaryFunctions
+                  choice $ fmap (\(n, f) -> f <$ reserved n) (Map.toList ufs)
 
-unaryFunctions :: [(String, DynQuantity ExactPi -> DynQuantity ExactPi)]
-unaryFunctions = [ ("abs", abs)
-                 , ("signum", signum)
-                 , ("sgn", signum)
-                 , ("exp", exp)
-                 , ("log", log)
-                 , ("ln", log)
-                 , ("sqrt", sqrt)
-                 , ("sin", sin)
-                 , ("cos", cos)
-                 , ("tan", tan)
-                 , ("asin", asin)
-                 , ("acos", acos)
-                 , ("atan", atan)
-                 , ("sinh", sinh)
-                 , ("cosh", cosh)
-                 , ("tanh", tanh)
-                 , ("asinh", asinh)
-                 , ("acosh", acosh)
-                 , ("atanh", atanh)
-                 ]
+-- | A quantity may be a 'number' with an optional 'unit' (the unit 'one' is otherwise implied), or it may be one
+-- of the 'constants' available in the supplied 'LanguageDefinition'.
+quantity :: (TokenParsing m, MonadReader LanguageDefinition m) => m (DynQuantity ExactPi)
+quantity = constant
+       <|> (Dyn.*~) <$> numberWithPowers <*> option (demoteUnit' one) unit
 
-quantity :: (TokenParsing m, Monad m) => [AnyUnit] -> m (DynQuantity ExactPi)
-quantity us = wrap <$> numberWithPowers <*> option (Just $ demoteUnit' one) (unit us)
-  where
-    wrap :: ExactPi -> Maybe AnyUnit -> DynQuantity ExactPi
-    wrap x (Just u) = x *~ u
-    wrap _ Nothing  = invalidQuantity
-
-numberWithPowers :: (TokenParsing m, Monad m) => m ExactPi
+numberWithPowers :: (TokenParsing m, MonadReader LanguageDefinition m) => m ExactPi
 numberWithPowers = token $ applyPowers <$> numberWithSuperscriptPower <*> many (symbolic '^' *> sign <*> decimal)
   where
-    numberWithSuperscriptPower = power <$> number <*> optional superscriptInteger
+    numberWithSuperscriptPower = do
+                                   useSuperscript <- asks allowSuperscriptExponentiation
+                                   if useSuperscript
+                                     then power <$> number <*> optional superscriptInteger
+                                     else number
     applyPowers :: ExactPi -> [Integer] -> ExactPi
     applyPowers x (n:ns) = (applyPowers x ns) ^^ n
     applyPowers x _ = x
@@ -128,42 +134,52 @@ numberWithPowers = token $ applyPowers <$> numberWithSuperscriptPower <*> many (
     power x (Just n) = x ^^ n
     power x _ = x
 
-unit :: (TokenParsing m, Monad m) => [AnyUnit] -> m (Maybe AnyUnit)
-unit us = prod <$> some oneUnit
+unit :: (TokenParsing m, MonadReader LanguageDefinition m) => m AnyUnit
+unit = prod <$> some oneUnit
   where
-    prod :: [Maybe AnyUnit] -> Maybe AnyUnit
-    prod = F.foldl' (liftA2 (Dyn.*)) (Just $ (demoteUnit' one))
-    oneUnit :: (TokenParsing m, Monad m) => m (Maybe AnyUnit)
+    prod :: [AnyUnit] -> AnyUnit
+    prod = F.foldl' (Dyn.*) (demoteUnit' one)
+    oneUnit :: (TokenParsing m, MonadReader LanguageDefinition m) => m AnyUnit
     oneUnit = token $ applyPowers <$> unitWithSuperscriptPower <*> many (symbolic '^' *> sign <*> decimal)
-    applyPowers :: Maybe AnyUnit -> [Integer] -> Maybe AnyUnit
+    applyPowers :: AnyUnit -> [Integer] -> AnyUnit
     applyPowers u (n:ns) = power (applyPowers u ns) (Just n)
     applyPowers u _ = u
-    unitWithSuperscriptPower :: (TokenParsing m, Monad m) => m (Maybe AnyUnit)
-    unitWithSuperscriptPower = power <$> bareUnit us <*> optional superscriptInteger
-    power :: Maybe AnyUnit -> Maybe Integer -> Maybe AnyUnit
-    power (Just u) (Just n) = Just $ u Dyn.^ n
+    unitWithSuperscriptPower :: (TokenParsing m, MonadReader LanguageDefinition m) => m AnyUnit
+    unitWithSuperscriptPower = power <$> bareUnit <*> optional superscriptInteger
+    power :: AnyUnit -> Maybe Integer -> AnyUnit
+    power u (Just n) = u Dyn.^ n
     power u _ = u
 
-bareUnit :: (CharParsing m, Monad m) => [AnyUnit] -> m (Maybe AnyUnit)
-bareUnit us = try (Just <$> fullAtomicUnit us)
-          <|> try (Just <$> abbreviatedAtomicUnit us)
-          <|> try (prefixedFullUnit us)
-          <|> try (prefixedAtomicUnit us)
+bareUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m AnyUnit
+bareUnit = try fullAtomicUnit
+       <|> try abbreviatedAtomicUnit
+       <|> try prefixedFullUnit
+       <|> try prefixedAtomicUnit
 
-prefixedFullUnit :: (CharParsing m, Monad m) => [AnyUnit] -> m (Maybe AnyUnit)
-prefixedFullUnit us = Dyn.applyPrefix <$> fullPrefix <*> fullAtomicUnit us
+tryApplyPrefix :: (Parsing m, Monad m) => m Prefix -> m AnyUnit -> m AnyUnit
+tryApplyPrefix p u = do
+                       p' <- p
+                       u' <- u
+                       case (Dyn.applyPrefix p' u') of
+                         Nothing -> unexpected "Metric prefix applied to non-metric unit."
+                         Just pu -> return pu
 
-prefixedAtomicUnit :: (CharParsing m, Monad m) => [AnyUnit] -> m (Maybe AnyUnit)
-prefixedAtomicUnit us = Dyn.applyPrefix <$> abbreviatedPrefix <*> abbreviatedAtomicUnit us
+prefixedFullUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m AnyUnit
+prefixedFullUnit = tryApplyPrefix fullPrefix fullAtomicUnit
 
-abbreviatedAtomicUnit :: (CharParsing m) => [AnyUnit] -> m AnyUnit
+prefixedAtomicUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m AnyUnit
+prefixedAtomicUnit = tryApplyPrefix abbreviatedPrefix abbreviatedAtomicUnit
+
+abbreviatedAtomicUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m AnyUnit
 abbreviatedAtomicUnit = atomicUnit abbreviation_en
 
-fullAtomicUnit :: (CharParsing m) => [AnyUnit] -> m AnyUnit
+fullAtomicUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m AnyUnit
 fullAtomicUnit = atomicUnit name_en
 
-atomicUnit :: (CharParsing m) => (forall a.NameAtom a -> String) -> [AnyUnit] -> m AnyUnit
-atomicUnit f us = choice $ mapMaybe parseUnit us
+atomicUnit :: (CharParsing m, MonadReader LanguageDefinition m) => (forall a.NameAtom a -> String) -> m AnyUnit
+atomicUnit f = do
+                 us <- asks units
+                 choice $ mapMaybe parseUnit us
   where
     parseUnit :: (CharParsing m) => AnyUnit -> Maybe (m AnyUnit)
     parseUnit u = do
@@ -189,14 +205,57 @@ sign = highlight Operator
    <|> id <$ char '+'
    <|> pure id
 
-number :: (TokenParsing m, Monad m) => m ExactPi
-number = pi <$ reserved "pi"
-     <|> 2 P.* pi <$ reserved "tau"
+number :: (TokenParsing m, MonadReader LanguageDefinition m) => m ExactPi
+number = dimensionlessConstant
      <|> convert <$> naturalOrScientific
   where
     convert (Left x) = realToFrac x
     convert (Right x) = realToFrac x
 
+dimensionlessConstant :: (TokenParsing m, MonadReader LanguageDefinition m) => m ExactPi
+dimensionlessConstant = do
+                          cs <- asks constants
+                          let ps = fmap (uncurry makeConstant) . Map.toList $ Map.mapMaybe (Dyn./~ (demoteUnit' one)) cs
+                          choice ps
+  where
+    makeConstant :: (TokenParsing m, MonadReader LanguageDefinition m) => Text -> ExactPi -> m ExactPi
+    makeConstant n v = v <$ reserved n
+
+constant :: (TokenParsing m, MonadReader LanguageDefinition m) => m (DynQuantity ExactPi)
+constant = do
+             cs <- asks constants
+             let ps = fmap (uncurry makeConstant) $ Map.toList cs
+             choice ps
+  where
+    makeConstant :: (TokenParsing m, MonadReader LanguageDefinition m) => Text -> AnyQuantity ExactPi -> m (DynQuantity ExactPi)
+    makeConstant n v = (demoteQuantity v) <$ reserved n
+
+{-
+Lexical Rules for Identifiers
+-}
+idStyle :: (TokenParsing m, MonadReader LanguageDefinition m) => m (IdentifierStyle m)
+idStyle = do
+            ufs <- asks unaryFunctions
+            return $ IdentifierStyle
+                       { _styleName = "identifier"
+                       , _styleReserved = fromList . fmap T.unpack $ (Map.keys ufs) ++ ["pi", "tau"]
+                       , _styleStart = letter
+                       , _styleLetter = alphaNum <|> char '_'
+                       , _styleHighlight = Identifier
+                       , _styleReservedHighlight = ReservedIdentifier
+                       }
+
+reserved :: (TokenParsing m, MonadReader LanguageDefinition m) => Text -> m ()
+reserved name = do
+                  s <- idStyle
+                  reserveText s name
+
+reservedOp :: (TokenParsing m, Monad m) => Text -> m ()
+reservedOp = reserveText emptyOps
+
+{-
+Parsing Superscript Numbers
+-}
 superscriptInteger :: (CharParsing m, Integral a) => m a
 superscriptInteger = superscriptSign <*> superscriptDecimal
 
