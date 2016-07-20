@@ -102,6 +102,7 @@ workingApproximateExamples =
   , ("sqrt(43)",              dq$ 6.5574385243 *~ one)
   , ("exp(1)",                dq$ 2.71828182846 *~ one)
   , ("abs(log(2^-7 degree))", dq$ 8.90025723 *~ one)
+  , ("sqrt(3 s^2)",           dq$ sqrt (3 *~ second^pos2))
   ]
 
 examplesWithNoValue :: [Text]
