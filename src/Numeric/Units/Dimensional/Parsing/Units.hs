@@ -171,12 +171,12 @@ prefixedAtomicUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m Any
 prefixedAtomicUnit = tryApplyPrefix abbreviatedPrefix abbreviatedAtomicUnit
 
 abbreviatedAtomicUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m AnyUnit
-abbreviatedAtomicUnit = atomicUnit abbreviation_en
+abbreviatedAtomicUnit = atomicUnit (Just . abbreviation_en)
 
 fullAtomicUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m AnyUnit
-fullAtomicUnit = atomicUnit name_en
+fullAtomicUnit = atomicUnit (Just . name_en)
 
-atomicUnit :: (CharParsing m, MonadReader LanguageDefinition m) => (forall a.NameAtom a -> String) -> m AnyUnit
+atomicUnit :: (CharParsing m, MonadReader LanguageDefinition m) => (forall m'.UnitName m' -> Maybe String) -> m AnyUnit
 atomicUnit f = do
                  us <- asks units
                  choice $ mapMaybe parseUnit us
@@ -184,20 +184,20 @@ atomicUnit f = do
     parseUnit :: (CharParsing m) => AnyUnit -> Maybe (m AnyUnit)
     parseUnit u = do
                     let n = anyUnitName u
-                    a <- asAtomic n
-                    return $ u <$ (string . f $ a) <* notFollowedBy letter
+                    n' <- f n
+                    return $ u <$ (string n') <* notFollowedBy letter
 
 abbreviatedPrefix :: (CharParsing m, Monad m) => m Prefix
-abbreviatedPrefix = prefix abbreviation_en
+abbreviatedPrefix = prefix prefixAbbreviationEnglish
 
 fullPrefix :: (CharParsing m, Monad m) => m Prefix
-fullPrefix = prefix name_en
+fullPrefix = prefix prefixNameEnglish
 
-prefix :: (CharParsing m, Monad m) => (PrefixName -> String) -> m Prefix
+prefix :: (CharParsing m, Monad m) => (Prefix -> String) -> m Prefix
 prefix f = choice $ fmap parsePrefix siPrefixes
   where
     parsePrefix :: (CharParsing m, Monad m) => Prefix -> m Prefix
-    parsePrefix p = p <$ (string . f . prefixName $ p)
+    parsePrefix p = p <$ (string . f $ p)
 
 sign :: (TokenParsing m, Num a) => m (a -> a)
 sign = highlight Operator

@@ -19,13 +19,14 @@ where
 import Control.Applicative
 import Data.Attoparsec.Text as A
 import Data.ExactPi as E
+import Data.Maybe (fromJust)
 import Data.Map as M
 import Data.Text as T
 import Numeric.Units.Dimensional.Dynamic hiding ((*), (/), recip)
 import qualified Numeric.Units.Dimensional.Dynamic as Dyn
 import Numeric.Units.Dimensional.SIUnits
 import Numeric.Units.Dimensional.NonSI
-import Numeric.Units.Dimensional.UnitNames.InterchangeNames as I
+import Numeric.Units.Dimensional.UnitNames
 import Prelude hiding (exponent, recip)
 import qualified Prelude as P
 
@@ -36,11 +37,14 @@ type UnitMap = Map Text AnyUnit
 buildUnitMap :: [AnyUnit] -> Either String UnitMap
 buildUnitMap [] = return M.empty
 buildUnitMap (u:us) = do
-                        if I.isAtomic n
-                          then buildUnitMap us >>= Right . M.insert (T.pack . I.name $ n) u
+                        if isAtomic n
+                          then 
+                            case ucumName n of
+                              Just n' -> buildUnitMap us >>= Right . M.insert (T.pack n') u
+                              Nothing -> Left "Only units with a UCUM name may be supplied."
                           else Left "Only atomic units may be supplied."
   where
-    n = interchangeName u
+    n = unitName u
 
 allUcumUnits :: [AnyUnit]
 allUcumUnits = allSIUnits ++
@@ -164,7 +168,7 @@ prefix :: Parser Prefix
 prefix = choice $ fmap parsePrefix siPrefixes
   where
     parsePrefix :: Prefix -> Parser Prefix
-    parsePrefix p = p <$ (string . T.pack . I.name . interchangeName $ p)
+    parsePrefix p = p <$ (string . T.pack . fromJust . nameComponent ucum . prefixName $ p)
 
 simpleUnit :: UnitMap -> Parser AnyUnit
 simpleUnit m = (prefixed a) <|> a
