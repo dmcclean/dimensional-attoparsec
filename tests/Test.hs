@@ -17,6 +17,7 @@ import Numeric.Units.Dimensional.Parsing.UCUM (allUcumUnits)
 import Data.ExactPi
 import Numeric.Units.Dimensional.Prelude
 import Numeric.Units.Dimensional.Dynamic (DynQuantity, AnyQuantity, demoteQuantity)
+import Numeric.Units.Dimensional.Dimensions.TermLevel (DynamicDimension(..))
 import Numeric.Units.Dimensional.NonSI
 import Numeric.Units.Dimensional.Codata
 import qualified Numeric.Units.Dimensional.Dynamic as Dyn
@@ -56,7 +57,7 @@ workingExact e v = it ("Correctly Parses " ++ show e) $ do
 
 parsesButHasNoValue :: Text -> Spec
 parsesButHasNoValue e = it ("Correctly Parses and Assigns No Value to " ++ show e) $ do
-                          parse e `shouldSatisfy` either (const False) ((== Nothing) . Dyn.dynamicDimension)
+                          parse e `shouldSatisfy` either (const False) ((== NoDimension) . Dyn.dynamicDimension)
 
 doesNotParse :: Text -> Spec
 doesNotParse e = it ("Does Not Parse " ++ show e) $ do
