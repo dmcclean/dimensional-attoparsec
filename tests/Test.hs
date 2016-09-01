@@ -102,6 +102,8 @@ workingExamples =
   , ("6.022e23",              dq$ 6.022e23 *~ one)
   , ("2^-15 radian",          dq$ ((2 P.^^ -15) *~ radian))
   , ("0.3 * c",               dq$ (0.3 *~ one) * speedOfLightInVacuum)
+  , ("0",                     dq$ 0 *~ one)
+  , ("0",                     dq$ 0 *~ newton)
   ]
 
 workingApproximateExamples :: [(Text, AnyQuantity Double)]

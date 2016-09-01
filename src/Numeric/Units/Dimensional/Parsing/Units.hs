@@ -117,7 +117,11 @@ unaryFunction = do
 -- of the 'constants' available in the supplied 'LanguageDefinition'.
 quantity :: (TokenParsing m, MonadReader LanguageDefinition m) => m (DynQuantity ExactPi)
 quantity = constant
-       <|> (Dyn.*~) <$> numberWithPowers <*> option (demoteUnit' one) unit
+       <|> (Dyn.*~) <$> numberWithPowers <*> unit
+       <|> makeQuantity <$> numberWithPowers
+  where
+    makeQuantity x | isExactZero x = polydimensionalZero
+                   | otherwise     = x Dyn.*~ demoteUnit' one
 
 numberWithPowers :: (TokenParsing m, MonadReader LanguageDefinition m) => m ExactPi
 numberWithPowers = token $ applyPowers <$> numberWithSuperscriptPower <*> many (symbolic '^' *> sign <*> decimal)
