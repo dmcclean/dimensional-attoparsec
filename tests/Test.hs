@@ -16,8 +16,7 @@ import Numeric.Units.Dimensional.Parsing.Units
 import Numeric.Units.Dimensional.Parsing.UCUM (allUcumUnits)
 import Data.ExactPi
 import Numeric.Units.Dimensional.Prelude
-import Numeric.Units.Dimensional.Dynamic (DynQuantity, AnyQuantity, demoteQuantity)
-import Numeric.Units.Dimensional.Dimensions.TermLevel (DynamicDimension(..))
+import Numeric.Units.Dimensional.Dynamic (DynQuantity, AnyQuantity, demoteQuantity, DynamicDimension(..))
 import Numeric.Units.Dimensional.NonSI
 import Numeric.Units.Dimensional.Codata
 import qualified Numeric.Units.Dimensional.Dynamic as Dyn
