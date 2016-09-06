@@ -20,6 +20,7 @@ import Numeric.Units.Dimensional.Dynamic (DynQuantity, AnyQuantity, demoteQuanti
 import Numeric.Units.Dimensional.NonSI
 import Numeric.Units.Dimensional.Codata
 import qualified Numeric.Units.Dimensional.Dynamic as Dyn
+import qualified Numeric.NumType.DK.Integers as N
 import qualified Prelude as P
 
 main :: IO ()
@@ -82,10 +83,12 @@ workingExamples =
   , ("1 kilogram",            dq$ 1 *~ kilo gram)
   , ("1 m²",                  dq$ 1 *~ square meter)
   , ("2 m²",                  dq$ 2 *~ square meter)
+  , ("2 m¹⁷",                 dq$ 2 *~ (meter ^ pos17))
   , ("(2 m)^2",               dq$ 4 *~ square meter)
   , ("9 mm",                  dq$ 9 *~ milli meter)
   , ("1 m^2",                 dq$ 1 *~ square meter)
   , ("1 m^-2",                dq$ 1 *~ (meter ^ neg2))
+  , ("2 m^17",                dq$ 2 *~ (meter ^ pos17))
   , ("1 s⁻¹",                 dq$ 1 *~ hertz)
   , ("1 s⁺¹",                 dq$ 1 *~ second)
   , ("1 m s^-1",              dq$ 1 *~ (meter / second))
@@ -104,6 +107,8 @@ workingExamples =
   , ("0",                     dq$ 0 *~ one)
   , ("0",                     dq$ 0 *~ newton)
   ]
+  where
+    pos17 = N.succ (N.succ (N.succ (N.succ (N.succ (N.succ (N.succ (N.succ N.pos9)))))))
 
 workingApproximateExamples :: [(Text, AnyQuantity Double)]
 workingApproximateExamples = 

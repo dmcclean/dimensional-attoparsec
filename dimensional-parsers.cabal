@@ -59,5 +59,6 @@ test-suite tests
                        attoparsec,
                        parsers,
                        ieee754,
+                       numtype-dk,
                        mtl,
                        base
