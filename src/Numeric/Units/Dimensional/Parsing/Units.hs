@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
@@ -28,6 +29,7 @@ import Numeric.Units.Dimensional.Dynamic hiding ((*~), (*), (/), recip)
 import qualified Numeric.Units.Dimensional.Dynamic as Dyn
 import Numeric.Units.Dimensional.SIUnits
 import Numeric.Units.Dimensional.UnitNames
+import Numeric.Units.Dimensional.UnitNames.Languages
 import Prelude hiding (exponent, recip)
 import Text.Parser.Char
 import Text.Parser.Combinators
@@ -94,10 +96,10 @@ table = [ [preop "-" negate ]
         ]
 
 binop :: (Monad m, TokenParsing m) => Text -> (a -> a -> a) -> Assoc -> Operator m a
-binop name fun assoc = Infix (fun <$ reservedOp name) assoc
+binop n f assoc = Infix (f <$ reservedOp n) assoc
 
 preop :: (Monad m, TokenParsing m) => Text -> (a -> a) -> Operator m a
-preop name fun = Prefix (fun <$ reservedOp name)
+preop n f = Prefix (f <$ reservedOp n)
 
 -- When we raise a dynamic quantity to an exact dimensionless integer power, we can use the more dimensionally-lenient ^ operator.
 -- When the exponent does not meet these conditions we fall back to the ** operator.
@@ -175,33 +177,34 @@ prefixedAtomicUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m Any
 prefixedAtomicUnit = tryApplyPrefix abbreviatedPrefix abbreviatedAtomicUnit
 
 abbreviatedAtomicUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m AnyUnit
-abbreviatedAtomicUnit = atomicUnit abbreviation_en
+abbreviatedAtomicUnit = atomicUnit internationalEnglishAbbreviation
 
 fullAtomicUnit :: (CharParsing m, MonadReader LanguageDefinition m) => m AnyUnit
-fullAtomicUnit = atomicUnit name_en
+fullAtomicUnit = atomicUnit internationalEnglish
 
-atomicUnit :: (CharParsing m, MonadReader LanguageDefinition m) => (forall a.NameAtom a -> String) -> m AnyUnit
-atomicUnit f = do
+atomicUnit :: (CharParsing m, MonadReader LanguageDefinition m) => Language o -> m AnyUnit
+atomicUnit l = do
                  us <- asks units
                  choice $ mapMaybe parseUnit us
   where
     parseUnit :: (CharParsing m) => AnyUnit -> Maybe (m AnyUnit)
     parseUnit u = do
-                    let n = anyUnitName u
+                    let n = name u
                     a <- asAtomic n
-                    return $ u <$ (string . f $ a) <* notFollowedBy letter
+                    n' <- nameComponent l a
+                    return $ u <$ string n' <* notFollowedBy letter
 
-abbreviatedPrefix :: (CharParsing m, Monad m) => m Prefix
-abbreviatedPrefix = prefix abbreviation_en
+abbreviatedPrefix :: (CharParsing m) => m Prefix
+abbreviatedPrefix = prefix internationalEnglishAbbreviation
 
-fullPrefix :: (CharParsing m, Monad m) => m Prefix
-fullPrefix = prefix name_en
+fullPrefix :: (CharParsing m) => m Prefix
+fullPrefix = prefix internationalEnglish
 
-prefix :: (CharParsing m, Monad m) => (PrefixName -> String) -> m Prefix
-prefix f = choice $ fmap parsePrefix siPrefixes
+prefix :: (CharParsing m) => Language 'Required -> m Prefix
+prefix l = choice $ fmap parsePrefix siPrefixes
   where
-    parsePrefix :: (CharParsing m, Monad m) => Prefix -> m Prefix
-    parsePrefix p = p <$ (string . f . prefixName $ p)
+    parsePrefix :: (CharParsing m) => Prefix -> m Prefix
+    parsePrefix p = p <$ (string . requiredNameComponent l . prefixName $ p)
 
 sign :: (TokenParsing m, Num a) => m (a -> a)
 sign = highlight Operator
@@ -250,9 +253,9 @@ idStyle = do
                        }
 
 reserved :: (TokenParsing m, MonadReader LanguageDefinition m) => Text -> m ()
-reserved name = do
-                  s <- idStyle
-                  reserveText s name
+reserved n = do
+                s <- idStyle
+                reserveText s n
 
 reservedOp :: (TokenParsing m, Monad m) => Text -> m ()
 reservedOp = reserveText emptyOps

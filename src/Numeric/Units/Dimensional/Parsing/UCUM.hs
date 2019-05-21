@@ -8,6 +8,7 @@ module Numeric.Units.Dimensional.Parsing.UCUM
 , ucumSI
 , buildUnitMap
 , allUcumUnits
+, allSIUnits
 , atomSymbol
 , atom
 , term
@@ -20,12 +21,13 @@ import Control.Applicative
 import Data.Attoparsec.Text as A
 import Data.ExactPi as E
 import Data.Map as M
+import Data.Maybe (fromJust)
 import Data.Text as T
 import Numeric.Units.Dimensional.Dynamic hiding ((*), (/), recip)
 import qualified Numeric.Units.Dimensional.Dynamic as Dyn
 import Numeric.Units.Dimensional.SIUnits
 import Numeric.Units.Dimensional.NonSI
-import Numeric.Units.Dimensional.UnitNames.InterchangeNames as I
+import Numeric.Units.Dimensional.UnitNames
 import Prelude hiding (exponent, recip)
 import qualified Prelude as P
 
@@ -36,18 +38,15 @@ type UnitMap = Map Text AnyUnit
 buildUnitMap :: [AnyUnit] -> Either String UnitMap
 buildUnitMap [] = return M.empty
 buildUnitMap (u:us) = do
-                        if I.isAtomic n
-                          then buildUnitMap us >>= Right . M.insert (T.pack . I.name $ n) u
-                          else Left "Only atomic units may be supplied."
+                        case asAtomic n of
+                          Just n' -> buildUnitMap us >>= Right . M.insert (T.pack . fromJust . nameComponent ucum $ n') u
+                          Nothing -> Left "Only atomic units may be supplied."
   where
-    n = interchangeName u
+    n = name u
 
 allUcumUnits :: [AnyUnit]
 allUcumUnits = allSIUnits ++
-  [ demoteUnit' inch
-  , demoteUnit' astronomicalUnit
-  , demoteUnit' astronomicalUnit
-  , demoteUnit' electronVolt
+  [ demoteUnit' electronVolt
   , demoteUnit' unifiedAtomicMassUnit
   , demoteUnit' gee
   , demoteUnit' inch
@@ -110,7 +109,7 @@ allSIUnits =
   , demoteUnit' henry
   , demoteUnit' lumen
   , demoteUnit' lux
-  , demoteUnit' degreeCelsius
+  --, demoteUnit' degreeCelsius -- TODO: add this back once degreeCelsius has a proper unit name
   , demoteUnit' becquerel
   , demoteUnit' gray
   , demoteUnit' sievert
@@ -118,10 +117,13 @@ allSIUnits =
   , demoteUnit' degree
   , demoteUnit' arcminute
   , demoteUnit' arcsecond
-  , demoteUnit' degreeOfArc
-  , demoteUnit' minuteOfArc
-  , demoteUnit' secondOfArc
   , demoteUnit' astronomicalUnit
+  , demoteUnit' liter
+  , demoteUnit' hectare
+  , demoteUnit' tonne
+  , demoteUnit' minute
+  , demoteUnit' hour
+  , demoteUnit' day
   ]
 
 ucumSI :: Parser AnyValue
@@ -164,7 +166,7 @@ prefix :: Parser Prefix
 prefix = choice $ fmap parsePrefix siPrefixes
   where
     parsePrefix :: Prefix -> Parser Prefix
-    parsePrefix p = p <$ (string . T.pack . I.name . interchangeName $ p)
+    parsePrefix p = p <$ (string . T.pack . fromJust . nameComponent ucum . prefixName $ p)
 
 simpleUnit :: UnitMap -> Parser AnyUnit
 simpleUnit m = (prefixed a) <|> a
